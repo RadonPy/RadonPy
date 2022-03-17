@@ -9,10 +9,12 @@ RadonPy is the first open-source Python library for fully automated calculation 
 - Python 3.7, 3.8, 3.9
 - LAMMPS >= 3Mar20
 - rdkit >= 2020.03
-- psi4 >= 1.4.1
+- psi4 >= 1.5
 - resp
 - dftd3
 - mdtraj >= 1.9
+- SciPy
+- matplotlib
 
 ## Usage
 
