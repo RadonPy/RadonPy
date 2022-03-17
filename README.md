@@ -1,7 +1,5 @@
-# RadonPy
-
 <p align="center">
-  <img height="300" src="https://github.com/RadonPy/RadonPy/blob/main/logo.png" alt="radonpy">
+  <img height="250" src="https://github.com/RadonPy/RadonPy/blob/main/logo.png" alt="radonpy">
 </p>
 
 ## Overview
