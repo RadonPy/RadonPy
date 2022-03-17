@@ -28,3 +28,6 @@ RadonPy is the first open-source Python library for fully automated calculation 
 ## Copyright and licence
 ©Copyright 2022 The RadonPy project, all rights reserved.
 Released under the `BSD-3 license`.
+
+
+![Radon_ikaho](https://user-images.githubusercontent.com/83273612/158885745-224f6e7a-4b1d-46f4-b5c6-80455827c904.png)
