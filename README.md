@@ -16,7 +16,7 @@ RadonPy is the first open-source Python library for fully automated calculation 
 - scipy
 - matplotlib
 
-## Installation and Usage
+## Installation and usage
 
 ## Features
 - Fully automated all-atom classical MD calculation for polymeric materials
@@ -29,6 +29,22 @@ RadonPy is the first open-source Python library for fully automated calculation 
 	- Checking archivement of equilibrium
 	- Run for non-equilibrium MD (NEMD)
 	- Calculation of physical properties from the MD calculation results
+		- Thermal conductivity
+		- Thermal diffusivity
+		- Density
+		- Cp
+		- Cv
+		- Linear expansion coefficient
+		- Volumetric expansion coefficient
+		- Compressibility
+		- Bulk modulus
+		- Isentropic compressibility
+		- Isentropic bulk modulus
+		- Static dielectric constant
+		- Refractive index
+		- Radius of gyration
+		- End-to-end distance
+		- Nematic order parameter
 	- Using LAMMPS and Psi4 as calculation engines of MD and DFT calculations
 - Implementation of presets to allow for proper and easy execution of polymer MD calculations
 	- Equilibration MD
