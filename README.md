@@ -20,22 +20,32 @@ User manual is currently in preparation.
 
 Instllation for conda:
 1. Create conda environment
-`conda create -n radonpy python=3.9`
-`conda activate radonpy`
+```
+conda create -n radonpy python=3.9
+conda activate radonpy
+```
 
-2. Install requirement packages by conda
-`conda install -c psi4 -c conda-forge rdkit psi4 resp mdtraj matplotlib`
+2. Installation of requirement packages by conda
+```
+conda install -c psi4 -c conda-forge rdkit psi4 resp mdtraj matplotlib
+```
 
-3. Install LAMMPS by conda
-`conda install -c conda-forge lammps`
+3. Installation of LAMMPS by conda
+```
+conda install -c conda-forge lammps
+```
 
 or manually build from source of <a href="https://www.lammps.org/">LAMMPS official site</a>
 In this case, the environment variable should be set:
-`export LAMMPS_EXEC=<Path-to-LAMMPS-binary>`
+```
+export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
+```
 
-4. Install RadonPy
-`git clone https://github.com/RadonPy/RadonPy.git`
-`export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH`
+4. Installation of RadonPy
+```
+git clone https://github.com/RadonPy/RadonPy.git
+export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
+```
 
 
 ## Features
