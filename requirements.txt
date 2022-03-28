@@ -1,0 +1,10 @@
+pandas
+numpy
+scipy
+matplotlib
+rdkit >= 2020.03
+psi4 >= 1.5
+resp
+dftd3
+mdtraj >= 1.9
+
