@@ -101,7 +101,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 - [1070 amorphous polymers](https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv)
 
 ## Publications
-1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," arXiv (2022)
+1. [Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," arXiv:2203.14090 (2022)](https://arxiv.org/abs/2203.14090)
 
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
