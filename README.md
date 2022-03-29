@@ -15,10 +15,9 @@ RadonPy is the first open-source Python library for fully automated calculation 
 - matplotlib
 
 ## Installation and usage
-The PyPI and conda packages are currently in preparation.
-User manual is currently in preparation.
+User manual and PyPI, conda packages are currently in preparation.
 
-Instllation for conda:
+### Instllation for conda:
 1. Create conda environment
 ```
 conda create -n radonpy python=3.9
@@ -35,8 +34,8 @@ conda install -c psi4 -c conda-forge rdkit psi4 resp mdtraj matplotlib
 conda install -c conda-forge lammps
 ```
 
-or manually build from source of <a href="https://www.lammps.org/">LAMMPS official site</a>
-In this case, the environment variable should be set:
+or manually build from source of [LAMMPS official site](https://www.lammps.org/).
+In this case, the environment variable must be set:
 ```
 export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 ```
@@ -99,7 +98,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 	- Emulator of polymer classification in PoLyInfo
 
 ## MD calculated data
-<a href="https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv">1070 amorphous polymers</a>
+- [1070 amorphous polymers](https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv)
 
 ## Publications
 1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," arXiv (2022)
