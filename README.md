@@ -46,6 +46,9 @@ git clone -b main https://github.com/RadonPy/RadonPy.git
 export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ```
 
+[PDF file](https://github.com/RadonPy/RadonPy/blob/develop/docs/RadonPy_tutorial_20220331.pdf) of RadonPy tutorial is available.
+
+
 
 ## Features
 - Fully automated all-atom classical MD calculation for polymeric materials
