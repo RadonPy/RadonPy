@@ -42,7 +42,7 @@ export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 
 4. Installation of RadonPy
 ```
-git clone https://github.com/RadonPy/RadonPy.git
+git clone -b main https://github.com/RadonPy/RadonPy.git
 export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ```
 
