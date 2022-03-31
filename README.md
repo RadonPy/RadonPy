@@ -17,6 +17,8 @@ RadonPy is the first open-source Python library for fully automated calculation 
 ## Installation and usage
 User manual and PyPI, conda packages are currently in preparation.
 
+[PDF file](https://github.com/RadonPy/RadonPy/blob/develop/docs/RadonPy_tutorial_20220331.pdf) of RadonPy tutorial is available.
+
 ### Instllation for conda:
 1. Create conda environment
 ```
@@ -45,9 +47,6 @@ export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 git clone -b main https://github.com/RadonPy/RadonPy.git
 export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ```
-
-[PDF file](https://github.com/RadonPy/RadonPy/blob/develop/docs/RadonPy_tutorial_20220331.pdf) of RadonPy tutorial is available.
-
 
 
 ## Features
