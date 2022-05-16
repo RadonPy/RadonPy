@@ -15,7 +15,7 @@ from rdkit import Geometry as Geom
 from ..core import utils, const, calc
 from .psi4_wrapper import Psi4w
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
@@ -57,7 +57,7 @@ def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_di
 def conformation_search(mol, ff=None, nconf=1000, dft_nconf=4, etkdg_ver=2, rmsthresh=0.5, tfdthresh=0.02, clustering='TFD',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', log_name='mol', solver='lammps', solver_path=None, work_dir=None, tmp_dir=None,
-    etkdg_omp=-1, psi4_omp=-1, psi4_mp=1, omp=1, mpi=-1, gpu=0, mm_mp=1, memory=1000, **kwargs):
+    etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000, **kwargs):
     """
     sim.qm.conformation_search
 
@@ -159,7 +159,7 @@ def sp_prop(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='sp_p
     return e_prop
 
 
-def polarizability(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='polarizability', mp=1,
+def polarizability(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='polarizability', mp=0,
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
     polar_method='wb97m-d3bj', polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'}, **kwargs):

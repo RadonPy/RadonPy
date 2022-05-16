@@ -17,13 +17,15 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 mdtraj_avail = True
 try:
     import mdtraj
 except ImportError:
     mdtraj_avail = False
+
+check_package = {}
 
 
 class LAMMPS():
@@ -36,12 +38,30 @@ class LAMMPS():
         self.input_file = kwargs.get('input_file', 'radon_lmp.in' if self.idx is None else 'radon_lmp_%i.in' % self.idx)
         self.output_file = kwargs.get('output_file', 'log.lammps')
 
+        self.package = {
+            'omp': False,
+            'intel': False,
+            'opt': False,
+            'gpu': False
+        }
+
+        global check_package
+        if const.check_package_disable:
+            for k in self.package.keys():
+                self.package[k] = True
+        elif self.solver_path in check_package.keys():
+            self.package = check_package[self.solver_path]
+        else:
+            self.check_package()
+            check_package[self.solver_path] = self.package
+
+
     @property
     def get_name(self):
         return 'LAMMPS'
 
 
-    def exec(self, input_file=None, output_file=None, omp=1, mpi=1, gpu=0, return_cmd=False, intel='off', opt='off'):
+    def exec(self, input_file=None, output_file=None, omp=0, mpi=0, gpu=0, return_cmd=False, intel='off', opt='off'):
         """
         LAMMPS.exec
 
@@ -61,8 +81,14 @@ class LAMMPS():
         input_file = input_file if input_file else self.input_file
         output_file = output_file if output_file else self.output_file
 
+        if omp != 0 and not self.package['omp']:
+            omp = 0
+        if gpu != 0 and not self.package['gpu']:
+            gpu = 0
+
         if mpi == -1:
             mpi = utils.cpu_count()
+            omp = 0
         elif omp == -1:
             omp = utils.cpu_count()
 
@@ -70,21 +96,18 @@ class LAMMPS():
         if intel == 'on':
             intel_flag = True
         elif intel == 'auto':
-            intel_flag = self.check_intel()
+            intel_flag = self.package['intel']
         else:
             intel_flag = False
 
         opt_flag = False
-        if intel_flag:
-            opt_flag = False
-        elif opt == 'on':
+        if opt == 'on':
             opt_flag = True
         elif opt == 'auto':
-            opt_flag = self.check_opt()
+            opt_flag = self.package['opt']
         else:
             opt_flag = False
 
-        os.environ['OMP_NUM_THREADS'] = str(omp)
         if mpi > 0:
             mpi_cmd = const.mpi_cmd % (mpi)
         elif mpi == 0:
@@ -92,15 +115,20 @@ class LAMMPS():
         elif mpi < 0:
             mpi_cmd = const.mpi_cmd
 
-        if gpu > 0 and omp > 1:
+        if omp == 0:
+            os.environ['OMP_NUM_THREADS'] = str(1)
+        else:
+            os.environ['OMP_NUM_THREADS'] = str(omp)
+
+        if gpu > 0 and omp > 0:
             acc_str = '-sf gpu -pk gpu %i omp %i' % (gpu, omp)
         elif gpu > 0:
             acc_str = '-sf gpu -pk gpu %i' % (gpu)
-        elif omp > 1:
+        elif omp > 0:
             if intel_flag:
                 acc_str = '-sf hybrid intel omp -pk omp %i' % (omp)
             elif opt_flag:
-                acc_str = '-sf hybrid opt omp -pk omp %i' % (omp)
+                acc_str = '-sf opt -pk omp %i' % (omp)
             else:
                 acc_str = '-sf omp -pk omp %i' % (omp)
         else:
@@ -140,7 +168,7 @@ class LAMMPS():
 
 
     def run(self, md, mol=None, confId=0, input_file=None, output_file=None, last_data=None, last_str=None,
-            omp=1, mpi=1, gpu=0, intel='off', opt='off'):
+            omp=0, mpi=0, gpu=0, intel='off', opt='off'):
 
         input_file = input_file if input_file else self.input_file
         output_file = output_file if output_file else self.output_file
@@ -181,10 +209,16 @@ class LAMMPS():
         return mol
 
 
-    def check_intel(self):
+    def check_package(self):
+        check_omp = False
+        check_intel = False
+        check_opt = False
+        check_gpu = False
 
         try:
             mpi_cmd = const.mpi_cmd % 1
+            mpi_cmd = mpi_cmd.split()[0]
+
             cmd = '%s %s -h' % (mpi_cmd, self.solver_path)
             cp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8')
             lines = str(cp.stdout).splitlines()
@@ -193,8 +227,20 @@ class LAMMPS():
             for l in lines:
                 if 'Installed packages:' in l:
                     flag = True
-                elif flag and 'INTEL' in l:
-                    return True
+                elif flag:
+                    if 'OPENMP' in l or 'USER-OMP' in l:
+                        utils.radon_print('OPENMP package is available.')
+                        check_omp = True
+                    if 'INTEL' in l:
+                        utils.radon_print('INTEL package is available.')
+                        check_intel = True
+                    if 'OPT' in l:
+                        utils.radon_print('OPT package is available.')
+                        check_opt = True
+                    if 'GPU' in l:
+                        utils.radon_print('GPU package is available.')
+                        check_gpu = True
+
         except:
             try:
                 cmd = '%s -h' % self.solver_path
@@ -205,44 +251,30 @@ class LAMMPS():
                 for l in lines:
                     if 'Installed packages:' in l:
                         flag = True
-                    elif flag and 'INTEL' in l:
-                        return True
+                    elif flag:
+                        if 'OPENMP' in l or 'USER-OMP' in l:
+                            utils.radon_print('OPENMP package is available.')
+                            check_omp = True
+                        if 'INTEL' in l:
+                            utils.radon_print('INTEL package is available.')
+                            check_intel = True
+                        if 'OPT' in l:
+                            utils.radon_print('OPT package is available.')
+                            check_opt = True
+                        if 'GPU' in l:
+                            utils.radon_print('GPU package is available.')
+                            check_gpu = True
+
             except:
+                utils.radon_print('Could not obtain package information of LAMMPS.', level=2)
                 return False
 
-        return False
+        self.package['omp'] = check_omp
+        self.package['intel'] = check_intel
+        self.package['opt'] = check_opt
+        self.package['gpu'] = check_gpu
 
-
-    def check_opt(self):
-
-        try:
-            mpi_cmd = const.mpi_cmd % 1
-            cmd = '%s %s -h' % (mpi_cmd, self.solver_path)
-            cp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8')
-            lines = str(cp.stdout).splitlines()
-
-            flag = False
-            for l in lines:
-                if 'Installed packages:' in l:
-                    flag = True
-                elif flag and 'OPT' in l:
-                    return True
-        except:
-            try:
-                cmd = '%s -h' % self.solver_path
-                cp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8')
-                lines = str(cp.stdout).splitlines()
-
-                flag = False
-                for l in lines:
-                    if 'Installed packages:' in l:
-                        flag = True
-                    elif flag and 'OPT' in l:
-                        return True
-            except:
-                return False
-
-        return False
+        return True
 
 
     def get_version(self):
@@ -2712,7 +2744,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
 
         for i, angle in enumerate(mol.angles):
             lines.append('%5d\t%i\t%i\t%i\t%i' %
-                (i+1, angle.ff.type_num, angle.a.GetIdx()+1, angle.b.GetIdx()+1, angle.c.GetIdx()+1))
+                (i+1, angle.ff.type_num, angle.a+1, angle.b+1, angle.c+1))
 
     if len(mol.dihedrals) > 0:
         lines.append('')
@@ -2721,7 +2753,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
 
         for i, dihedral in enumerate(mol.dihedrals):
             lines.append('%5d\t%i\t%i\t%i\t%i\t%i' %
-                (i+1, dihedral.ff.type_num, dihedral.a.GetIdx()+1, dihedral.b.GetIdx()+1, dihedral.c.GetIdx()+1, dihedral.d.GetIdx()+1))
+                (i+1, dihedral.ff.type_num, dihedral.a+1, dihedral.b+1, dihedral.c+1, dihedral.d+1))
 
 
     if len(mol.impropers) > 0:
@@ -2731,7 +2763,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
 
         for i, improper in enumerate(mol.impropers):
             lines.append('%5d\t%i\t%i\t%i\t%i\t%i' %
-                (i+1, improper.ff.type_num, improper.a.GetIdx()+1, improper.b.GetIdx()+1, improper.c.GetIdx()+1, improper.d.GetIdx()+1))
+                (i+1, improper.ff.type_num, improper.a+1, improper.b+1, improper.c+1, improper.d+1))
 
     return lines
 
