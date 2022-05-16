@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 
-__version__ = '0.2.0b3'
+#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Use of this source code is governed by a BSD-3-style
+#  license that can be found in the LICENSE file.
+
+__version__ = '0.2.1'
 
 import matplotlib
 matplotlib.use('Agg')
@@ -36,7 +40,7 @@ if __name__ == '__main__':
     omp_psi4 = int(os.environ.get('RadonPy_OMP_Psi4', 4))
     mem_psi4 = int(os.environ.get('RadonPy_MEM_Psi4', 1000))
 
-    conf_mm_omp = int(os.environ.get('RadonPy_Conf_MM_OMP', 1))
+    conf_mm_omp = int(os.environ.get('RadonPy_Conf_MM_OMP', 0))
     conf_mm_mpi = int(os.environ.get('RadonPy_Conf_MM_MPI', utils.cpu_count()))
     conf_mm_gpu = int(os.environ.get('RadonPy_Conf_MM_GPU', 0))
     conf_mm_mp = int(os.environ.get('RadonPy_Conf_MM_MP', 0))

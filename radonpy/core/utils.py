@@ -17,7 +17,7 @@ from rdkit.Chem import AllChem
 from rdkit import Geometry as Geom
 from . import const
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 class Angle():
@@ -225,52 +225,52 @@ def remove_atom(mol, idx):
 
     if hasattr(mol, 'impropers'):
         for imp in mol.impropers:
-            if idx in [imp.a.GetIdx(), imp.b.GetIdx(), imp.c.GetIdx(), imp.d.GetIdx()]:
+            if idx in [imp.a, imp.b, imp.c, imp.d]:
                 continue
-            idx_a = imp.a.GetIdx() if imp.a.GetIdx() < idx else imp.a.GetIdx()-1
-            idx_b = imp.b.GetIdx() if imp.b.GetIdx() < idx else imp.b.GetIdx()-1
-            idx_c = imp.c.GetIdx() if imp.c.GetIdx() < idx else imp.c.GetIdx()-1
-            idx_d = imp.d.GetIdx() if imp.d.GetIdx() < idx else imp.d.GetIdx()-1
+            idx_a = imp.a if imp.a < idx else imp.a-1
+            idx_b = imp.b if imp.b < idx else imp.b-1
+            idx_c = imp.c if imp.c < idx else imp.c-1
+            idx_d = imp.d if imp.d < idx else imp.d-1
             impropers_copy.append(
                 Improper(
-                    a=mol.GetAtomWithIdx(idx_a),
-                    b=mol.GetAtomWithIdx(idx_b),
-                    c=mol.GetAtomWithIdx(idx_c),
-                    d=mol.GetAtomWithIdx(idx_d),
+                    a=idx_a,
+                    b=idx_b,
+                    c=idx_c,
+                    d=idx_d,
                     ff=deepcopy(imp.ff)
                 )
             )
 
     if hasattr(mol, 'dihedrals'):
         for dih in mol.dihedrals:
-            if idx in [dih.a.GetIdx(), dih.b.GetIdx(), dih.c.GetIdx(), dih.d.GetIdx()]:
+            if idx in [dih.a, dih.b, dih.c, dih.d]:
                 continue
-            idx_a = dih.a.GetIdx() if dih.a.GetIdx() < idx else dih.a.GetIdx()-1
-            idx_b = dih.b.GetIdx() if dih.b.GetIdx() < idx else dih.b.GetIdx()-1
-            idx_c = dih.c.GetIdx() if dih.c.GetIdx() < idx else dih.c.GetIdx()-1
-            idx_d = dih.d.GetIdx() if dih.d.GetIdx() < idx else dih.d.GetIdx()-1
+            idx_a = dih.a if dih.a < idx else dih.a-1
+            idx_b = dih.b if dih.b < idx else dih.b-1
+            idx_c = dih.c if dih.c < idx else dih.c-1
+            idx_d = dih.d if dih.d < idx else dih.d-1
             dihedrals_copy.append(
                 Dihedral(
-                    a=mol.GetAtomWithIdx(idx_a),
-                    b=mol.GetAtomWithIdx(idx_b),
-                    c=mol.GetAtomWithIdx(idx_c),
-                    d=mol.GetAtomWithIdx(idx_d),
+                    a=idx_a,
+                    b=idx_b,
+                    c=idx_c,
+                    d=idx_d,
                     ff=deepcopy(dih.ff)
                 )
             )
 
     if hasattr(mol, 'angles'):
         for angle in mol.angles:
-            if idx in [angle.a.GetIdx(), angle.b.GetIdx(), angle.c.GetIdx()]:
+            if idx in [angle.a, angle.b, angle.c]:
                 continue
-            idx_a = angle.a.GetIdx() if angle.a.GetIdx() < idx else angle.a.GetIdx()-1
-            idx_b = angle.b.GetIdx() if angle.b.GetIdx() < idx else angle.b.GetIdx()-1
-            idx_c = angle.c.GetIdx() if angle.c.GetIdx() < idx else angle.c.GetIdx()-1
+            idx_a = angle.a if angle.a < idx else angle.a-1
+            idx_b = angle.b if angle.b < idx else angle.b-1
+            idx_c = angle.c if angle.c < idx else angle.c-1
             angles_copy.append(
                 Angle(
-                    a=mol.GetAtomWithIdx(idx_a),
-                    b=mol.GetAtomWithIdx(idx_b),
-                    c=mol.GetAtomWithIdx(idx_c),
+                    a=idx_a,
+                    b=idx_b,
+                    c=idx_c,
                     ff=deepcopy(angle.ff)
                 )
             )
@@ -374,9 +374,9 @@ def add_angle(mol, a, b, c, ff=None):
 
     mol.angles.append(
         Angle(
-            a=mol.GetAtomWithIdx(a),
-            b=mol.GetAtomWithIdx(b),
-            c=mol.GetAtomWithIdx(c),
+            a=a,
+            b=b,
+            c=c,
             ff=ff
         )
     )
@@ -402,8 +402,8 @@ def remove_angle(mol, a, b, c):
         return False
 
     for i, angle in enumerate(mol.angles):
-        if ((angle.a.GetIdx() == a and angle.b.GetIdx() == b and angle.c.GetIdx() == c) or
-            (angle.c.GetIdx() == a and angle.b.GetIdx() == b and angle.a.GetIdx() == c)):
+        if ((angle.a == a and angle.b == b and angle.c == c) or
+            (angle.c == a and angle.b == b and angle.a == c)):
             del mol.angles[i]
             break
 
@@ -429,10 +429,10 @@ def add_dihedral(mol, a, b, c, d, ff=None):
 
     mol.dihedrals.append(
         Dihedral(
-            a=mol.GetAtomWithIdx(a),
-            b=mol.GetAtomWithIdx(b),
-            c=mol.GetAtomWithIdx(c),
-            d=mol.GetAtomWithIdx(d),
+            a=a,
+            b=b,
+            c=c,
+            d=d,
             ff=ff
         )
     )
@@ -457,9 +457,9 @@ def remove_dihedral(mol, a, b, c, d):
     if not hasattr(mol, 'dihedrals'):
         return False
 
-    for i, dihedral in enumerate(mol.dihedral):
-        if ((dihedral.a.GetIdx() == a and dihedral.b.GetIdx() == b and dihedral.c.GetIdx() == c and dihedral.d.GetIdx() == d) or
-            (dihedral.d.GetIdx() == a and dihedral.c.GetIdx() == b and dihedral.b.GetIdx() == c and dihedral.a.GetIdx() == d)):
+    for i, dihedral in enumerate(mol.dihedrals):
+        if ((dihedral.a == a and dihedral.b == b and dihedral.c == c and dihedral.d == d) or
+            (dihedral.d == a and dihedral.c == b and dihedral.b == c and dihedral.a == d)):
             del mol.dihedrals[i]
             break
 
@@ -485,10 +485,10 @@ def add_improper(mol, a, b, c, d, ff=None):
 
     mol.impropers.append(
         Improper(
-            a=mol.GetAtomWithIdx(a),
-            b=mol.GetAtomWithIdx(b),
-            c=mol.GetAtomWithIdx(c),
-            d=mol.GetAtomWithIdx(d),
+            a=a,
+            b=b,
+            c=c,
+            d=d,
             ff=ff
         )
     )
@@ -514,10 +514,10 @@ def remove_improper(mol, a, b, c, d):
         return False
 
     match = False
-    for i, improper in enumerate(mol.improper):
-        if improper.a.GetIdx() == a:
+    for i, improper in enumerate(mol.impropers):
+        if improper.a == a:
             for perm in permutations([b, c, d], 3):
-                if improper.b.GetIdx() == perm[0] and improper.c.GetIdx() == perm[1] and improper.d.GetIdx() == perm[2]:
+                if improper.b == perm[0] and improper.c == perm[1] and improper.d == perm[2]:
                     del mol.impropers[i]
                     match = True
                     break
@@ -691,6 +691,11 @@ def MolToExXYZFile(mol, filename, confId=0):
 
 
 def picklable(mol):
+    Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
+    return mol
+
+
+def picklable_old(mol):
     
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     if hasattr(mol, 'angles'):
@@ -728,6 +733,10 @@ def picklable(mol):
 
 
 def restore_picklable(mol):
+    return mol
+
+
+def restore_picklable_old(mol):
 
     if hasattr(mol, 'angles'):
         for angle in mol.angles:
@@ -768,14 +777,12 @@ def pickle_dump(mol, path):
     mol = picklable(mol)
     with open(path, mode='wb') as f:
         pickle.dump(mol, f)
-    mol = restore_picklable(mol)
 
 
 def pickle_load(path):
     try:
         with open(path, mode='rb') as f:
             mol = pickle.load(f)
-        mol = restore_picklable(mol)
     except:
         return None
     return mol
@@ -784,8 +791,6 @@ def pickle_load(path):
 def deepcopy_mol(mol):
     mol = picklable(mol)
     copy_mol = deepcopy(mol)
-    copy_mol = restore_picklable(copy_mol)
-    mol = restore_picklable(mol)
 
     return copy_mol
 

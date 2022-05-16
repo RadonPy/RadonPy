@@ -13,7 +13,7 @@ from itertools import permutations
 from rdkit import Chem
 from ..core import calc, utils
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 class GAFF():
@@ -638,8 +638,8 @@ class GAFF():
                     unique = True
                     atoms = [p1, p, p2]
                     for ang in mol.angles:
-                        if ((ang.a.GetIdx() == p1.GetIdx() and ang.b.GetIdx() == p.GetIdx() and ang.c.GetIdx() == p2.GetIdx()) or
-                            (ang.c.GetIdx() == p1.GetIdx() and ang.b.GetIdx() == p.GetIdx() and ang.a.GetIdx() == p2.GetIdx())):
+                        if ((ang.a == p1.GetIdx() and ang.b == p.GetIdx() and ang.c == p2.GetIdx()) or
+                            (ang.c == p1.GetIdx() and ang.b == p.GetIdx() and ang.a == p2.GetIdx())):
                             unique = False
                     if unique:
                         pt1 = p1.GetProp('ff_type')
@@ -647,7 +647,7 @@ class GAFF():
                         pt2 = p2.GetProp('ff_type')
                         at = '%s,%s,%s' % (pt1, pt, pt2)
                         
-                        result = self.set_atype(mol, a=p1, b=p, c=p2, at=at)
+                        result = self.set_atype(mol, a=p1.GetIdx(), b=p.GetIdx(), c=p2.GetIdx(), at=at)
                         
                         if not result:
                             alt1 = alt_ptype[pt1] if pt1 in alt_ptype.keys() else None
@@ -670,7 +670,7 @@ class GAFF():
                             if alt1 and alt2 and alt3: at_alt.append('%s,%s,%s' % (alt1, alt2, alt3))
                             
                             for at in at_alt:
-                                result = self.set_atype(mol, a=p1, b=p, c=p2, at=at)
+                                result = self.set_atype(mol, a=p1.GetIdx(), b=p.GetIdx(), c=p2.GetIdx(), at=at)
                                 if result:
                                     utils.radon_print('Using alternate angle type %s instead of %s,%s,%s' % (at, pt1, pt, pt2))
                                     break
@@ -765,7 +765,7 @@ class GAFF():
                     * np.exp(-2*(self.param.bt[bt1].r0 - self.param.bt[bt2].r0)**2/(self.param.bt[bt1].r0 + self.param.bt[bt2].r0)**2) )
 
         angle = utils.Angle(
-            a=a, b=b, c=c,
+            a=a.GetIdx(), b=b.GetIdx(), c=c.GetIdx(),
             ff=self.Angle_ff(
                 ff_type = '%s,%s,%s' % (pt1, pt, pt2),
                 k = emp_k_ang,
@@ -825,10 +825,10 @@ class GAFF():
                     unique = True
                     atoms = [p1b, p1, p2, p2b]
                     for dih in mol.dihedrals:
-                        if ((dih.a.GetIdx() == p1b.GetIdx() and dih.b.GetIdx() == p1.GetIdx() and
-                             dih.c.GetIdx() == p2.GetIdx() and dih.d.GetIdx() == p2b.GetIdx()) or
-                            (dih.d.GetIdx() == p1b.GetIdx() and dih.c.GetIdx() == p1.GetIdx() and
-                             dih.b.GetIdx() == p2.GetIdx() and dih.a.GetIdx() == p2b.GetIdx())):
+                        if ((dih.a == p1b.GetIdx() and dih.b == p1.GetIdx() and
+                             dih.c == p2.GetIdx() and dih.d == p2b.GetIdx()) or
+                            (dih.d == p1b.GetIdx() and dih.c == p1.GetIdx() and
+                             dih.b == p2.GetIdx() and dih.a == p2b.GetIdx())):
                             unique = False
                     if unique:
                         p1bt = p1b.GetProp('ff_type')
@@ -837,7 +837,7 @@ class GAFF():
                         p2bt = p2b.GetProp('ff_type')
                         dt = '%s,%s,%s,%s' % (p1bt, p1t, p2t, p2bt)
                         
-                        result = self.set_dtype(mol, a=p1b, b=p1, c=p2, d=p2b, dt=dt)
+                        result = self.set_dtype(mol, a=p1b.GetIdx(), b=p1.GetIdx(), c=p2.GetIdx(), d=p2b.GetIdx(), dt=dt)
                         
                         if not result:
                             alt1 = alt_ptype[p1t] if p1t in alt_ptype.keys() else None
@@ -853,7 +853,7 @@ class GAFF():
                             if alt1 and alt2: dt_alt.append('%s,%s,%s,%s' % (p1bt, alt1, alt2, p2bt))
                             
                             for dt in dt_alt:
-                                result = self.set_dtype(mol, a=p1b, b=p1, c=p2, d=p2b, dt=dt)
+                                result = self.set_dtype(mol, a=p1b.GetIdx(), b=p1.GetIdx(), c=p2.GetIdx(), d=p2b.GetIdx(), dt=dt)
                                 if result:
                                     utils.radon_print('Using alternate dihedral type %s instead of %s,%s,%s,%s' % (dt, p1bt, p1t, p2t, p2bt))
                                     break
@@ -921,7 +921,7 @@ class GAFF():
                     p3t = perm[2].GetProp('ff_type')
                     it = '%s,%s,%s,%s' % (pt, p1t, p2t, p3t)
                     
-                    result = self.set_itype(mol, a=p, b=perm[0], c=perm[1], d=perm[2], it=it)
+                    result = self.set_itype(mol, a=p.GetIdx(), b=perm[0].GetIdx(), c=perm[1].GetIdx(), d=perm[2].GetIdx(), it=it)
                     
                     if not result:
                         alt1 = alt_ptype[pt] if pt in alt_ptype.keys() else None
@@ -952,7 +952,7 @@ class GAFF():
                         if alt1 and alt2 and alt3 and alt4: it_alt.append('%s,%s,%s,%s' % (alt1, alt2, alt3, alt4))
                         
                         for it in it_alt:
-                            result = self.set_itype(mol, a=p, b=perm[0], c=perm[1], d=perm[2], it=it)
+                            result = self.set_itype(mol, a=p.GetIdx(), b=perm[0].GetIdx(), c=perm[1].GetIdx(), d=perm[2].GetIdx(), it=it)
                             if result:
                                 utils.radon_print('Using alternate improper type %s instead of %s,%s,%s,%s' % (it, pt, p1t, p2t, p3t))
                                 break
