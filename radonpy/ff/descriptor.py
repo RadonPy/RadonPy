@@ -14,7 +14,7 @@ import concurrent.futures as confu
 from rdkit import Chem
 from ..core import poly, utils
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 class FF_descriptor():
@@ -95,7 +95,8 @@ class FF_descriptor():
         k_ang = []
         theta0 = []
         for ang in mol.angles:
-            if ignoreH and (ang.a.GetSymbol() == 'H' or ang.b.GetSymbol() == 'H' or ang.c.GetSymbol() == 'H'):
+            if ignoreH and (mol.GetAtomWithIdx(ang.a).GetSymbol() == 'H' or
+                mol.GetAtomWithIdx(ang.b).GetSymbol() == 'H' or mol.GetAtomWithIdx(ang.c).GetSymbol() == 'H'):
                 continue
             k_ang.append(ang.ff.k)
             theta0.append(ang.ff.theta0)
@@ -103,7 +104,8 @@ class FF_descriptor():
         k_dih = []
         #phi0 = []
         for dih in mol.dihedrals:
-            if ignoreH and (dih.a.GetSymbol() == 'H' or dih.b.GetSymbol() == 'H' or dih.c.GetSymbol() == 'H' or dih.d.GetSymbol() == 'H'):
+            if ignoreH and (mol.GetAtomWithIdx(dih.a).GetSymbol() == 'H' or mol.GetAtomWithIdx(dih.b).GetSymbol() == 'H' or
+                mol.GetAtomWithIdx(dih.c).GetSymbol() == 'H' or mol.GetAtomWithIdx(dih.d).GetSymbol() == 'H'):
                 continue
             idx = np.argmax(dih.ff.k)
             k_dih.append(dih.ff.k[idx])

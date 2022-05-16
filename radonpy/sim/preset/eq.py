@@ -16,7 +16,7 @@ from ...core import calc, const, utils
 from .. import lammps, preset
 from ..md import MD
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 class Equilibration(preset.Preset):
@@ -239,7 +239,7 @@ class Equilibration_analyze(lammps.Analyze):
 class Annealing(Equilibration):
     def exec(self, confId=0, f_density=0.8,
              max_temp=700.0, temp=300.0, press=1.0, ann_step=5, eq_step=8,
-             omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.eq.Annealing.exec
 
@@ -271,7 +271,7 @@ class Annealing(Equilibration):
         utils.radon_print('Packing simulation (eq1) by LAMMPS is running...', level=1)
         md1 = self.packing(f_density=f_density, max_temp=max_temp, comm_cutoff=kwargs.get('comm_cutoff', 8.0), **kwargs)
         self.mol = lmp.run(md1, mol=self.mol, confId=confId, input_file=self.in_file1, last_str=self.last_str1, last_data=self.last_data1,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file1))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete packing simulation (eq1). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -280,7 +280,7 @@ class Annealing(Equilibration):
         utils.radon_print('Annealing simulation (eq2) by LAMMPS is running...', level=1)
         md2 = self.annealing(max_temp=max_temp, temp=temp, press=press, step=int(1000000*ann_step), set_init_velocity=True, **kwargs)
         self.mol = lmp.run(md2, mol=self.mol, confId=confId, input_file=self.in_file2, last_str=self.last_str2, last_data=self.last_data2,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file2))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete annealing simulation (eq2). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -289,7 +289,7 @@ class Annealing(Equilibration):
         utils.radon_print('Sampling simulation (eq3) by LAMMPS is running...', level=1)
         md3 = self.sampling(temp=temp, press=press, step=int(1000000*eq_step), **kwargs)
         self.mol = lmp.run(md3, mol=self.mol, confId=confId, input_file=self.in_file, last_str=self.last_str, last_data=self.last_data,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete sampling simulation (eq3). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -320,7 +320,7 @@ class Annealing(Equilibration):
 class EQ21step(Equilibration):
     def exec(self, confId=0, f_density=0.8,
              max_temp=600.0, temp=300.0, press=1.0, max_press=50000, step_list=None, press_ratio=None,
-             time_step=1.0, eq_step=5, omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             time_step=1.0, eq_step=5, omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.eq.EQ21step.exec
 
@@ -349,7 +349,7 @@ class EQ21step(Equilibration):
         utils.radon_print('Packing simulation (eq1) by LAMMPS is running...', level=1)
         md1 = self.packing(f_density=f_density, comm_cutoff=kwargs.get('comm_cutoff', 8.0), **kwargs)
         self.mol = lmp.run(md1, mol=self.mol, confId=confId, input_file=self.in_file1, last_str=self.last_str1, last_data=self.last_data1,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file1))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete packing simulation (eq1). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -359,7 +359,7 @@ class EQ21step(Equilibration):
         md2 = self.eq21step(max_temp=max_temp, temp=temp, press=press, max_press=max_press,
                             step_list=step_list, press_ratio=press_ratio, time_step=time_step, set_init_velocity=True, **kwargs)
         self.mol = lmp.run(md2, mol=self.mol, confId=confId, input_file=self.in_file2, last_str=self.last_str2, last_data=self.last_data2,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file2))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete Larsen 21 step compression/decompression equilibration (eq2). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -368,7 +368,7 @@ class EQ21step(Equilibration):
         utils.radon_print('Sampling simulation (eq3) by LAMMPS is running...', level=1)
         md3 = self.sampling(temp=temp, press=press, step=int(1000000*eq_step), **kwargs)
         self.mol = lmp.run(md3, mol=self.mol, confId=confId, input_file=self.in_file, last_str=self.last_str, last_data=self.last_data,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete sampling simulation (eq3). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -424,7 +424,7 @@ class Additional(Equilibration):
         self.pickle_file = kwargs.get('pickle_file', '%seq%i_last.pickle' % (self.prefix, self.idx))
 
 
-    def exec(self, confId=0, temp=300.0, press=1.0, eq_step=5, omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+    def exec(self, confId=0, temp=300.0, press=1.0, eq_step=5, omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.eq.Additional.exec
 
@@ -453,7 +453,7 @@ class Additional(Equilibration):
         utils.radon_print('Additional equilibration (eq%i) by LAMMPS is running...' % self.idx, level=1)
         md = self.sampling(temp=temp, press=press, step=int(1000000*eq_step), **kwargs)
         self.mol = lmp.run(md, mol=self.mol, confId=confId, input_file=self.in_file, last_str=self.last_str, last_data=self.last_data,
-                           omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+                           omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete additional equilibration (eq%i). Elapsed time = %s' % (self.idx, str(dt2-dt1)), level=1)

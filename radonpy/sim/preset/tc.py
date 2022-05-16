@@ -16,7 +16,7 @@ from rdkit import Geometry as Geom
 from ...core import poly, utils, calc, const
 from .. import lammps, preset
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 
 class NEMD_MP(preset.Preset):
@@ -41,7 +41,7 @@ class NEMD_MP(preset.Preset):
 
     def exec(self, confId=0, step=5000000, time_step=0.2, temp=300.0,
              decomp=False, step_decomp=500000, decomp_intermol=False,
-             omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.tc.NEMD_MP.exec
 
@@ -79,7 +79,7 @@ class NEMD_MP(preset.Preset):
         utils.radon_print('Thermal conductive simulation (kinetic energy exchanging NEMD) by LAMMPS is running...', level=1)
 
         intel = 'off' if decomp else intel
-        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         if cp.returncode != 0 and (
                     (self.last_str is not None and not os.path.exists(os.path.join(self.work_dir, self.last_str)))
                     or (self.last_data is not None and not os.path.exists(os.path.join(self.work_dir, self.last_data)))
@@ -723,7 +723,7 @@ class NEMD_MP_Analyze(lammps.Analyze):
 class NEMD_MP_Additional(preset.Preset):
     def exec(self, confId=0, step=5000000, time_step=0.2, temp=300.0,
              decomp=False, step_decomp=500000, decomp_intermol=False,
-             omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.tc.NEMD_MP_Additional.exec
 
@@ -758,7 +758,7 @@ class NEMD_MP_Additional(preset.Preset):
         utils.radon_print('Additional thermal conductive simulation (kinetic energy exchanging NEMD) by LAMMPS is running...', level=1)
 
         intel = 'off' if decomp else intel
-        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         if cp.returncode != 0 and (
                     (self.last_str is not None and not os.path.exists(os.path.join(self.work_dir, self.last_str)))
                     or (self.last_data is not None and not os.path.exists(os.path.join(self.work_dir, self.last_data)))
@@ -1091,7 +1091,7 @@ class NEMD_Langevin(preset.Preset):
 
     def exec(self, confId=0, step=10000000, time_step=0.2, h_temp=320.0, l_temp=280.0,
              decomp=False, step_decomp=500000, decomp_intermol=False,
-             omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.tc.NEMD_Langevin.exec
 
@@ -1128,7 +1128,7 @@ class NEMD_Langevin(preset.Preset):
         utils.radon_print('Thermal conductive simulation (Langevin thermostat NEMD) by LAMMPS is running...', level=1)
 
         intel = 'off' if decomp else intel
-        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         if cp.returncode != 0 and (
                     (self.last_str is not None and not os.path.exists(os.path.join(self.work_dir, self.last_str)))
                     or (self.last_data is not None and not os.path.exists(os.path.join(self.work_dir, self.last_data)))
@@ -1685,7 +1685,7 @@ class EMD_GK(preset.Preset):
 
 
     def exec(self, confId=0, step=10000000, time_step=0.2, temp=300.0, hfsample=5, hfcorrlen=5000,
-             omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
+             omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         """
         preset.tc.EMD_GK.exec
 
@@ -1717,7 +1717,7 @@ class EMD_GK(preset.Preset):
         dt1 = datetime.datetime.now()
         utils.radon_print('Thermal conductive simulation (Green-Kubo EMD) by LAMMPS is running...', level=1)
 
-        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel)
+        cp = lmp.exec(input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         if cp.returncode != 0 and (
                     (self.last_str is not None and not os.path.exists(os.path.join(self.work_dir, self.last_str)))
                     or (self.last_data is not None and not os.path.exists(os.path.join(self.work_dir, self.last_data)))

@@ -23,7 +23,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 MD_avail = True
 try:
@@ -1314,17 +1314,17 @@ def energy_mm(mol, diele=1.0, coord=None, confId=0, **kwargs):
             
     if calc_angle:
         for ang in mol.angles:
-            theta = angle(ang.a, ang.b, ang.c, rad=True)
+            theta = angle(mol.GetAtomWithIdx(ang.a), mol.GetAtomWithIdx(ang.b), mol.GetAtomWithIdx(ang.c), rad=True)
             energy_angle += ang.ff.k*( (theta - ang.ff.theta0_rad)**2 )
             
     if calc_dihedral:
         for dih in mol.dihedrals:
-            phi = dihedral(dih.a, dih.b, dih.c, dih.d, rad=True)
+            phi = dihedral(mol.GetAtomWithIdx(dih.a), mol.GetAtomWithIdx(dih.b), mol.GetAtomWithIdx(dih.c), mol.GetAtomWithIdx(dih.d), rad=True)
             energy_dihedral += np.sum(dih.ff.k*(1.0 + np.cos(dih.ff.n*phi - dih.ff.d0_rad)))
                 
     if calc_improper:
         for imp in mol.impropers:
-            phi = dihedral(imp.a, imp.b, imp.c, imp.d, rad=True)
+            phi = dihedral(mol.GetAtomWithIdx(imp.a), mol.GetAtomWithIdx(imp.b), mol.GetAtomWithIdx(imp.c), mol.GetAtomWithIdx(imp.d), rad=True)
             energy_improper += imp.ff.k*(1.0 + imp.ff.d0*cos(imp.ff.n*phi))
     
     if calc_coulomb:

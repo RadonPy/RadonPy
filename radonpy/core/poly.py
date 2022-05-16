@@ -12,7 +12,6 @@ from math import sqrt, log10
 from copy import deepcopy
 import re
 import random
-import gc
 import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
@@ -21,7 +20,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.2.0'
+__version__ = '0.2.1'
 
 MD_avail = True
 try:
@@ -185,68 +184,42 @@ def combine_mols(mol1, mol2, res_name_1='RU0', res_name_2='RU0'):
     cell = None
 
     if hasattr(mol1, 'angles'):
-        for angle in mol1.angles:
-            angles.append(
-                utils.Angle(
-                    a=mol.GetAtomWithIdx(angle.a.GetIdx()),
-                    b=mol.GetAtomWithIdx(angle.b.GetIdx()),
-                    c=mol.GetAtomWithIdx(angle.c.GetIdx()),
-                    ff=deepcopy(angle.ff)
-                )
-            )
+        angles = deepcopy(mol1.angles)
     if hasattr(mol2, 'angles'):
         for angle in mol2.angles:
             angles.append(
                 utils.Angle(
-                    a=mol.GetAtomWithIdx(angle.a.GetIdx()+mol1_n),
-                    b=mol.GetAtomWithIdx(angle.b.GetIdx()+mol1_n),
-                    c=mol.GetAtomWithIdx(angle.c.GetIdx()+mol1_n),
+                    a=angle.a+mol1_n,
+                    b=angle.b+mol1_n,
+                    c=angle.c+mol1_n,
                     ff=deepcopy(angle.ff)
                 )
             )
 
     if hasattr(mol1, 'dihedrals'):
-        for dihedral in mol1.dihedrals:
-            dihedrals.append(
-                utils.Dihedral(
-                    a=mol.GetAtomWithIdx(dihedral.a.GetIdx()),
-                    b=mol.GetAtomWithIdx(dihedral.b.GetIdx()),
-                    c=mol.GetAtomWithIdx(dihedral.c.GetIdx()),
-                    d=mol.GetAtomWithIdx(dihedral.d.GetIdx()),
-                    ff=deepcopy(dihedral.ff)
-                )
-            )
+        dihedrals = deepcopy(mol1.dihedrals)
     if hasattr(mol2, 'dihedrals'):
         for dihedral in mol2.dihedrals:
             dihedrals.append(
                 utils.Dihedral(
-                    a=mol.GetAtomWithIdx(dihedral.a.GetIdx()+mol1_n),
-                    b=mol.GetAtomWithIdx(dihedral.b.GetIdx()+mol1_n),
-                    c=mol.GetAtomWithIdx(dihedral.c.GetIdx()+mol1_n),
-                    d=mol.GetAtomWithIdx(dihedral.d.GetIdx()+mol1_n),
+                    a=dihedral.a+mol1_n,
+                    b=dihedral.b+mol1_n,
+                    c=dihedral.c+mol1_n,
+                    d=dihedral.d+mol1_n,
                     ff=deepcopy(dihedral.ff)
                 )
             )
 
     if hasattr(mol1, 'impropers'):
-        for improper in mol1.impropers:
-            impropers.append(
-                utils.Improper(
-                    a=mol.GetAtomWithIdx(improper.a.GetIdx()),
-                    b=mol.GetAtomWithIdx(improper.b.GetIdx()),
-                    c=mol.GetAtomWithIdx(improper.c.GetIdx()),
-                    d=mol.GetAtomWithIdx(improper.d.GetIdx()),
-                    ff=deepcopy(improper.ff)
-                )
-            )
+        impropers = deepcopy(mol1.impropers)
     if hasattr(mol2, 'impropers'):
         for improper in mol2.impropers:
             impropers.append(
                 utils.Improper(
-                    a=mol.GetAtomWithIdx(improper.a.GetIdx()+mol1_n),
-                    b=mol.GetAtomWithIdx(improper.b.GetIdx()+mol1_n),
-                    c=mol.GetAtomWithIdx(improper.c.GetIdx()+mol1_n),
-                    d=mol.GetAtomWithIdx(improper.d.GetIdx()+mol1_n),
+                    a=improper.a+mol1_n,
+                    b=improper.b+mol1_n,
+                    c=improper.c+mol1_n,
+                    d=improper.d+mol1_n,
                     ff=deepcopy(improper.ff)
                 )
             )
@@ -354,7 +327,6 @@ def polymerize_mols(mol, n, bond_length=1.5, dihedral=np.pi, random_rot=False, d
             mol_c = utils.deepcopy_mol(mol)
 
         poly = connect_mols(poly, mol_c, bond_length=bond_length, dihedral=dihedral, random_rot=random_rot, dih_type=dih_type, confId2=confId)
-        gc.collect()
 
     return poly
 
@@ -405,7 +377,6 @@ def copolymerize_mols(mols, n, bond_length=1.5, dihedral=np.pi, random_rot=False
 
             poly = connect_mols(poly, mol_c, bond_length=bond_length, dihedral=dihedral, random_rot=random_rot, dih_type=dih_type,
                                 confId1=confId, res_name_2='RU%s' % const.pdb_id[j])
-            gc.collect()
 
     return poly
 
@@ -473,7 +444,6 @@ def random_copolymerize_mols(mols, n, ratio, bond_length=1.5, dihedral=np.pi, ra
 
         poly = connect_mols(poly, mol_c, bond_length=bond_length, dihedral=dihedral, random_rot=random_rot, dih_type=dih_type,
                             confId1=confId, res_name_2='RU%s' % const.pdb_id[mol_index[i]])
-        gc.collect()
 
     return poly
 
@@ -524,7 +494,6 @@ def block_copolymerize_mols(mols, n, bond_length=1.5, dihedral=np.pi, random_rot
 
             poly = connect_mols(poly, mol_c, bond_length=bond_length, dihedral=dihedral, random_rot=random_rot, dih_type=dih_type,
                                 confId1=confId, res_name_2='RU%s' % const.pdb_id[i])
-            gc.collect()
 
     return poly
 
@@ -573,7 +542,6 @@ def terminate_mols(poly, mol1, mol2=None, bond_length=1.5, dihedral=np.pi, rando
                             res_name_2=res_name_2)
 
     set_terminal_idx(poly)
-    gc.collect()
     
     return poly
 
@@ -653,7 +621,7 @@ def polymerize_rw(mol, n, headhead=False, confId=0, tacticity='atactic', atac_ra
             else:
                 retry_flag = True
                 utils.radon_print('Reached maximum number of retrying step in polymerize_rw.', level=1)
-        gc.collect()
+
         if retry_flag and retry > 0: break
 
     if not check_3d_structure(poly, dist_min=dist_min) or (check_chi and not check_tacticity(poly, tacticity, tac_array=tac_array)):
@@ -750,7 +718,7 @@ def copolymerize_rw(mols, n, tacticity='atactic', atac_ratio=0.5, tac_array=None
                 else:
                     retry_flag = True
                     utils.radon_print('Reached maximum number of retrying copolymerize_rw.', level=1)
-            gc.collect()
+
             if retry_flag and retry > 0: break
         if retry_flag and retry > 0: break
 
@@ -874,7 +842,7 @@ def random_copolymerize_rw(mols, n, ratio, ratio_type='exact', tacticity='atacti
             else:
                 retry_flag = True
                 utils.radon_print('Reached maximum number of retrying random_copolymerize_rw.', level=1)
-        gc.collect()
+
         if retry_flag and retry > 0: break
 
     if not check_3d_structure(poly, dist_min=dist_min) or (check_chi and not check_tacticity(poly, tacticity)):
@@ -912,7 +880,7 @@ def _random_copolymerize_rw_mp_worker(args):
     poly = random_copolymerize_rw(mols, n, ratio, ratio_type=ratio_type, tacticity=tacticity, atac_ratio=atac_ratio,
                 retry=retry, retry_step=retry_step, dist_min=dist_min, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
     utils.picklable(poly)
-    gc.collect()
+
     return poly
 
 
@@ -996,7 +964,7 @@ def block_copolymerize_rw(mols, n, tacticity='atactic', atac_ratio=0.5, tac_arra
                 else:
                     retry_flag = True
                     utils.radon_print('Reached maximum number of retrying block_copolymerize_rw.', level=1)
-            gc.collect()
+
             if retry_flag and retry > 0: break
         if retry_flag and retry > 0: break
 
@@ -1091,7 +1059,6 @@ def terminate_rw(poly, mol1, mol2=None, retry_step=100, dist_min=0.7,
                 utils.radon_print('Reached maximum number of retrying termination.', level=2)
 
     set_terminal_idx(poly)
-    gc.collect()
 
     return poly
 
@@ -1204,8 +1171,6 @@ def amorphous_cell(mol, n, cell=None, density=0.03, retry=10, retry_step=100, th
                 Geom.Point3D(mol_coord[j, 0], mol_coord[j, 1], mol_coord[j, 2])
             )
 
-        gc.collect()
-
     if retry_flag:
         if retry <= 0:
             utils.radon_print('Reached maximum number of retrying amorphous_cell.', level=3)
@@ -1299,8 +1264,6 @@ def amorphous_mixture_cell(mols, n, cell=None, density=0.03, retry=10, retry_ste
                     cell_n+j,
                     Geom.Point3D(mol_coord[j, 0], mol_coord[j, 1], mol_coord[j, 2])
                 )
-
-            gc.collect()
             
         if retry_flag and retry > 0: break
 
@@ -1404,8 +1367,6 @@ def nematic_cell(mol, n, cell=None, density=0.1, retry=10, retry_step=100, thres
                 Geom.Point3D(mol_coord[j, 0], mol_coord[j, 1], mol_coord[j, 2])
             )
 
-        gc.collect()
-
     if retry_flag:
         if retry <= 0:
             utils.radon_print('Reached maximum number of retrying nematic_cell.', level=3)
@@ -1507,8 +1468,6 @@ def nematic_mixture_cell(mols, n, cell=None, density=0.1, retry=10, retry_step=1
                     cell_n+j,
                     Geom.Point3D(mol_coord[j, 0], mol_coord[j, 1], mol_coord[j, 2])
                 )
-
-            gc.collect()
 
         if retry_flag and retry > 0: break
 
@@ -2088,7 +2047,6 @@ def super_cell(cell, x=1, y=1, z=1, confId=0):
     zcell.cell = utils.Cell(lx*x, zcell.cell.xlo, ly*y, zcell.cell.ylo, lz*z, zcell.cell.zlo)
 
     Chem.SanitizeMol(zcell)
-    gc.collect()
 
     return zcell
 
@@ -2515,7 +2473,7 @@ def check_chiral_monomer(mol):
     n_chiral = 0
     ter = utils.mol_from_smiles('*C')
     mol_c = utils.deepcopy_mol(mol)
-    mol_c = terminate_mols(mol_c, ter)
+    mol_c = terminate_mols(mol_c, ter, random_rot=True)
     set_mainchain_flag(mol_c)
     for atom in mol_c.GetAtoms():
         if (int(atom.GetChiralTag()) == 1 or int(atom.GetChiralTag()) == 2) and atom.GetBoolProp('main_chain'):
@@ -2546,7 +2504,7 @@ def get_tacticity(mol, confId=0):
     set_linker_flag(mol_c)
     if mol_c.GetIntProp('head_idx') >= 0 and mol_c.GetIntProp('tail_idx') >= 0:
         ter = utils.mol_from_smiles('*C')
-        mol_c = terminate_mols(mol_c, ter)
+        mol_c = terminate_mols(mol_c, ter, random_rot=True)
     set_mainchain_flag(mol_c)
 
     Chem.AssignStereochemistryFrom3D(mol_c, confId=confId)
