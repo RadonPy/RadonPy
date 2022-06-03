@@ -20,7 +20,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 MD_avail = True
 try:
@@ -2853,7 +2853,7 @@ def substruct_match_smiles_list(smiles, smi_series, mp=None):
     if mp is None: mp = utils.cpu_count()
     args = []
     for index, smi in smi_series.iteritems():
-        args.append([smiles, smi])
+        args.append([smi, smiles])
 
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_substruct_match_smiles_worker, args)
@@ -3162,7 +3162,10 @@ def polyinfo_classifier(smi, return_flag=False):
 
     mr_mol = make_cyclicpolymer(m_smi, 4, return_mol=True)
     if mr_mol is None:
-        return class_id
+        if return_flag:
+            return class_id, {}
+        else:
+            return class_id
     
     flag = {
         'PHYC': False,
@@ -3194,7 +3197,10 @@ def polyinfo_classifier(smi, return_flag=False):
             m_mol = Chem.AddHs(m_mol)
         except:
             utils.radon_print('Cannot convert to Mol object from %s' % m_smi, level=2)
-            return class_id
+            if return_flag:
+                return class_id, {}
+            else:
+                return class_id
 
         m_nelem = {'H':0, 'C':0, 'hetero':0, 'halogen':0}
         for atom in m_mol.GetAtoms():
@@ -3213,7 +3219,10 @@ def polyinfo_classifier(smi, return_flag=False):
             mol = Chem.AddHs(mol)
         except:
             utils.radon_print('Cannot convert to Mol object from %s' % smi, level=2)
-            return class_id
+            if return_flag:
+                return class_id, {}
+            else:
+                return class_id
 
         nelem = {'H':0, 'C':0, 'hetero':0, 'halogen':0}
         for atom in mol.GetAtoms():
@@ -3241,7 +3250,10 @@ def polyinfo_classifier(smi, return_flag=False):
 
         r_mol = make_cyclicpolymer(smi, 4, return_mol=True)
         if r_mol is None:
-            return class_id
+            if return_flag:
+                return class_id, {}
+            else:
+                return class_id
 
         for atom in r_mol.GetAtoms():
             if atom.GetSymbol() == 'C' and atom.GetBoolProp('main_chain'):

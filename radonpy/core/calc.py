@@ -23,7 +23,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 MD_avail = True
 try:
@@ -49,7 +49,7 @@ if const.mpi4py_avail:
     try:
         from mpi4py.futures import MPIPoolExecutor
     except ImportError as e:
-        utils.radon_print('Cannot import mpi4py. Chang to const.mpi4py_avail = False. %s' % e, level=2)
+        utils.radon_print('Cannot import mpi4py. Change to const.mpi4py_avail = False. %s' % e, level=2)
         const.mpi4py_avail = False
 
 
@@ -1014,7 +1014,7 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
                 utils.radon_print('DFT optimization of conformer %i' % i)
                 psi4mol.confId = i
                 psi4mol.name = '%s_conf_search_%i' % (log_name, i)
-                energy, _ = psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
+                energy, _ = psi4mol.optimize(ignore_conv_error=True, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
                 if not psi4mol.error_flag:
                     opt_success += 1
                 dft_energies.append((energy, i))
@@ -1095,7 +1095,7 @@ def _conf_search_psi4_worker(args):
     psi4mol.name = '%s_conf_search_%i' % (log_name, confId)
     utils.radon_print('DFT optimization of conformer %i' % psi4mol.confId)
 
-    energy, coord = psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
+    energy, coord = psi4mol.optimize(ignore_conv_error=True, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
     error_flag = psi4mol.error_flag
 
     del psi4mol
