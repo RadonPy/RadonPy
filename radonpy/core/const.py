@@ -12,7 +12,7 @@ print_level = 1
 tqdm_disable = True
 debug = False
 
-# Do not check installing package in LAMMPS?
+# Do not check installing package in LAMMPS
 check_package_disable = False
 
 # Use mpi4py

@@ -324,7 +324,7 @@ class EQ21step(Equilibration):
         """
         preset.eq.EQ21step.exec
 
-        Execution of Larsen's 21 step compression/decompression equilibration protocole 
+        Execution of Larsen's 21 step compression/decompression equilibration protocol
         
         Optional args:
             confId: Target conformer ID (int)
