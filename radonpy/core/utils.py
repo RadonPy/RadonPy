@@ -17,7 +17,7 @@ from rdkit.Chem import AllChem
 from rdkit import Geometry as Geom
 from . import const
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 
 class Angle():
@@ -919,10 +919,16 @@ def mol_from_smiles(smiles, coord=True, version=2, ez='E', chiral='S'):
     # Generate 3D coordinates
     if coord:
         try:
-            AllChem.EmbedMolecule(mol, etkdg)
+            enbed_res = AllChem.EmbedMolecule(mol, etkdg)
         except Exception as e:
             radon_print('Cannot generate 3D coordinate of %s' % smiles, level=3)
             return None
+        if enbed_res == -1:
+            etkdg.useRandomCoords = True
+            enbed_res = AllChem.EmbedMolecule(mol, etkdg)
+            if enbed_res == -1:
+                radon_print('Cannot generate 3D coordinate of %s' % smiles, level=3)
+                return None
 
     # Dihedral angles of unspecified double bonds in a polymer backbone are modified to 180 degree.
     if len(backbone_dih) > 0:

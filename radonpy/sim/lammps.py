@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.1'
+__version__ = '0.2.2'
 
 mdtraj_avail = True
 try:
@@ -83,8 +83,10 @@ class LAMMPS():
 
         if omp != 0 and not self.package['omp']:
             omp = 0
+            utils.radon_print('OPENMP package is not available. Parallel number of OPENMP is changed to zero.', level=2)
         if gpu != 0 and not self.package['gpu']:
             gpu = 0
+            utils.radon_print('GPU package is not available. Parallel number of GPU is changed to zero.', level=2)
 
         if mpi == -1:
             mpi = utils.cpu_count()
@@ -229,16 +231,16 @@ class LAMMPS():
                     flag = True
                 elif flag:
                     if 'OPENMP' in l or 'USER-OMP' in l:
-                        utils.radon_print('OPENMP package is available.')
+                        utils.radon_print('OPENMP package is available.', level=1)
                         check_omp = True
                     if 'INTEL' in l:
-                        utils.radon_print('INTEL package is available.')
+                        utils.radon_print('INTEL package is available.', level=1)
                         check_intel = True
                     if 'OPT' in l:
-                        utils.radon_print('OPT package is available.')
+                        utils.radon_print('OPT package is available.', level=1)
                         check_opt = True
                     if 'GPU' in l:
-                        utils.radon_print('GPU package is available.')
+                        utils.radon_print('GPU package is available.', level=1)
                         check_gpu = True
 
         except:
@@ -253,16 +255,16 @@ class LAMMPS():
                         flag = True
                     elif flag:
                         if 'OPENMP' in l or 'USER-OMP' in l:
-                            utils.radon_print('OPENMP package is available.')
+                            utils.radon_print('OPENMP package is available.', level=1)
                             check_omp = True
                         if 'INTEL' in l:
-                            utils.radon_print('INTEL package is available.')
+                            utils.radon_print('INTEL package is available.', level=1)
                             check_intel = True
                         if 'OPT' in l:
-                            utils.radon_print('OPT package is available.')
+                            utils.radon_print('OPT package is available.', level=1)
                             check_opt = True
                         if 'GPU' in l:
-                            utils.radon_print('GPU package is available.')
+                            utils.radon_print('GPU package is available.', level=1)
                             check_gpu = True
 
             except:
