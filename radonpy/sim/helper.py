@@ -25,7 +25,7 @@ try:
 except ImportError:
     psi4_ver = None
 
-__version__ = '0.2.0'
+__version__ = '0.3.0b1'
 
 
 class Pipeline_Helper():

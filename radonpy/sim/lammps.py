@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b1'
 
 mdtraj_avail = True
 try:
@@ -29,9 +29,9 @@ check_package = {}
 
 
 class LAMMPS():
-    def __init__(self, work_dir=None, solver_path=None, **kwargs):
+    def __init__(self, work_dir=None, solver_path=None, check_lammps_package=True, **kwargs):
         self.work_dir = work_dir if work_dir else './'
-        self.solver_path = solver_path if solver_path else os.getenv('LAMMPS_EXEC', 'lmp_mpi')
+        self.solver_path = solver_path if solver_path else const.lammps_exec
 
         self.idx = kwargs.get('idx', None)
         self.dat_file = kwargs.get('dat_file', 'radon_md_lmp.data' if self.idx is None else 'radon_md_lmp_%i.data' % self.idx)
@@ -46,7 +46,7 @@ class LAMMPS():
         }
 
         global check_package
-        if const.check_package_disable:
+        if const.check_package_disable or not check_lammps_package:
             for k in self.package.keys():
                 self.package[k] = True
         elif self.solver_path in check_package.keys():
@@ -83,8 +83,10 @@ class LAMMPS():
 
         if omp != 0 and not self.package['omp']:
             omp = 0
+            utils.radon_print('OPENMP package is not available. Parallel number of OPENMP is changed to zero.', level=2)
         if gpu != 0 and not self.package['gpu']:
             gpu = 0
+            utils.radon_print('GPU package is not available. Parallel number of GPU is changed to zero.', level=2)
 
         if mpi == -1:
             mpi = utils.cpu_count()
@@ -229,16 +231,16 @@ class LAMMPS():
                     flag = True
                 elif flag:
                     if 'OPENMP' in l or 'USER-OMP' in l:
-                        utils.radon_print('OPENMP package is available.')
+                        utils.radon_print('OPENMP package is available.', level=1)
                         check_omp = True
                     if 'INTEL' in l:
-                        utils.radon_print('INTEL package is available.')
+                        utils.radon_print('INTEL package is available.', level=1)
                         check_intel = True
                     if 'OPT' in l:
-                        utils.radon_print('OPT package is available.')
+                        utils.radon_print('OPT package is available.', level=1)
                         check_opt = True
                     if 'GPU' in l:
-                        utils.radon_print('GPU package is available.')
+                        utils.radon_print('GPU package is available.', level=1)
                         check_gpu = True
 
         except:
@@ -253,16 +255,16 @@ class LAMMPS():
                         flag = True
                     elif flag:
                         if 'OPENMP' in l or 'USER-OMP' in l:
-                            utils.radon_print('OPENMP package is available.')
+                            utils.radon_print('OPENMP package is available.', level=1)
                             check_omp = True
                         if 'INTEL' in l:
-                            utils.radon_print('INTEL package is available.')
+                            utils.radon_print('INTEL package is available.', level=1)
                             check_intel = True
                         if 'OPT' in l:
-                            utils.radon_print('OPT package is available.')
+                            utils.radon_print('OPT package is available.', level=1)
                             check_opt = True
                         if 'GPU' in l:
-                            utils.radon_print('GPU package is available.')
+                            utils.radon_print('GPU package is available.', level=1)
                             check_gpu = True
 
             except:
@@ -458,6 +460,19 @@ class LAMMPS():
                     indata.append('# msd')
                     self.make_input_msd(md, wf, i, indata, unfix)
 
+                # Generate "variable"
+                if wf.variable:
+                    indata.append('')
+                    indata.append('# variable')
+                    self.make_input_variable(md, wf, i, indata, unfix)
+
+                # Generate "fix ave/time"
+                if wf.timeave:
+                    indata.append('')
+                    indata.append('# ave/time')
+                    self.make_input_timeave(md, wf, i, indata, unfix)
+
+
                 if len(wf.add) > 0:
                     indata.extend(wf.add)
 
@@ -469,21 +484,21 @@ class LAMMPS():
                 # Generate anisotropic pressure
                 if wf.ensemble in ['npt', 'nph']:
                     if wf.p_aniso:
-                        if not wf.px_start and not wf.py_start and not wf.pz_start:
+                        if wf.px_start is None and wf.py_start is None and wf.pz_start is None:
                             p_str = 'aniso %f %f %f ' % (wf.p_start, wf.p_stop, wf.p_dump)
                         else:
                             p_str = ''
-                            if wf.px_start:
+                            if wf.px_start is not None and wf.px_stop is not None and wf.px_dump is not None:
                                 p_str += 'x %f %f %f ' % (wf.px_start, wf.px_stop, wf.px_dump)
-                            if wf.px_start:
+                            if wf.py_start is not None and wf.py_stop is not None and wf.py_dump is not None:
                                 p_str += 'y %f %f %f ' % (wf.py_start, wf.py_stop, wf.py_dump)
-                            if wf.px_start:
+                            if wf.pz_start is not None and wf.pz_stop is not None and wf.pz_dump is not None:
                                 p_str += 'z %f %f %f ' % (wf.pz_start, wf.pz_stop, wf.pz_dump)
                         if wf.p_couple:
                             p_str += 'couple %s ' % (wf.p_couple)
                     else:
                         p_str = 'iso %f %f %f ' % (wf.p_start, wf.p_stop, wf.p_dump)
-                    p_str += 'nreset 1000 '
+                    p_str += 'nreset %i ' % wf.p_nreset
 
 
                 # Generate time integration, thermostat, and barostat
@@ -751,7 +766,7 @@ class LAMMPS():
 
 
     def make_input_efield(self, md, wf, i, indata, unfix, nounfix=False):
-        evalue = wf.efield_value if efield_freq == 0.0 else 'v_efac'
+        evalue = wf.efield_value if wf.efield_freq == 0.0 else 'v_efac'
         if wf.efield_axis == 'x':
             ex = evalue
             ey = 0.0
@@ -788,8 +803,8 @@ class LAMMPS():
         if wf.efield_x:
             ez = wf.efield_z
 
-        if efield_freq != 0.0:
-            indata.append('variable efac equal %f*sin(2*PI*%f*time*1e-15)' % (wf.efield_value, efield_freq))
+        if wf.efield_freq != 0.0:
+            indata.append('variable efac equal %f*sin(2*PI*%f*time*1e-15)' % (wf.efield_value, wf.efield_freq))
         indata.append('fix EF%i all efield %s %s %s' % (i+1, ex, ey, ez))
         if not nounfix:
             unfix.append('unfix EF%i' % (i+1))
@@ -849,14 +864,25 @@ class LAMMPS():
         return indata, unfix
 
 
+    def make_input_variable(self, md, wf, i, indata, unfix):
+        for n, s, a in zip(wf.variable_name, wf.variable_style, wf.variable_args):
+            indata.append('variable %s %s %s' % (n, s, ' '.join(a)))
+
+        return indata, unfix
+
+
     def make_input_timeave(self, md, wf, i, indata, unfix, nounfix=False):
-        # Under development
-        #indata.append('fix ave%i all ave/time %i %i %i %s' % (i+1, Nevery, Nfreq, Nstep, var))
+        if wf.timeave_name is None:
+            wf.timeave_name = 'ave%i' % (i+1)
 
-        if not nounfix:
-            unfix.append('unfix ave%i' % (i+1))
+        if not nounfix and not wf.timeave_nounfix:
+            unfix.append('unfix %s' % wf.timeave_name)
 
-        md.thermo_style += ' f_ave%i' % (i+1)
+        var_str = ' '.join(wf.timeave_var)
+        indata.append('fix %s all ave/time %i %i %i %s' % (wf.timeave_name, wf.timeave_nevery, wf.timeave_nfreq, wf.timeave_nstep, var_str))
+
+        fix_name = ' '.join(['f_%s[%i]' % (wf.timeave_name, (j+1)) for j in range(len(wf.timeave_var))])
+        md.thermo_style += ' %s' % fix_name
         indata.append('thermo_style %s' % (md.thermo_style))
         indata.append('thermo_modify flush yes')
         indata.append('thermo %i' % (md.thermo_freq))
@@ -2579,7 +2605,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     a_coeff = []
     i = 0
     if hasattr(mol, 'angles'):
-        for angle in mol.angles:
+        for angle in mol.angles.values():
             if angle.ff.type in unique_atype:
                 angle.ff.type_num = unique_atype.index(angle.ff.type)+1
             else:
@@ -2592,7 +2618,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     d_coeff = []
     i = 0
     if hasattr(mol, 'dihedrals'):
-        for dihedral in mol.dihedrals:
+        for dihedral in mol.dihedrals.values():
             if dihedral.ff.type in unique_dtype:
                 dihedral.ff.type_num = unique_dtype.index(dihedral.ff.type)+1
             else:
@@ -2608,7 +2634,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     i_coeff = []
     i = 0
     if hasattr(mol, 'impropers'):
-        for improper in mol.impropers:
+        for improper in mol.impropers.values():
             if improper.ff.type in unique_itype:
                 improper.ff.type_num = unique_itype.index(improper.ff.type)+1
             else:
@@ -2742,7 +2768,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('Angles')
         lines.append('')
 
-        for i, angle in enumerate(mol.angles):
+        for i, angle in enumerate(mol.angles.values()):
             lines.append('%5d\t%i\t%i\t%i\t%i' %
                 (i+1, angle.ff.type_num, angle.a+1, angle.b+1, angle.c+1))
 
@@ -2751,7 +2777,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('Dihedrals')
         lines.append('')
 
-        for i, dihedral in enumerate(mol.dihedrals):
+        for i, dihedral in enumerate(mol.dihedrals.values()):
             lines.append('%5d\t%i\t%i\t%i\t%i\t%i' %
                 (i+1, dihedral.ff.type_num, dihedral.a+1, dihedral.b+1, dihedral.c+1, dihedral.d+1))
 
@@ -2761,7 +2787,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('Impropers')
         lines.append('')
 
-        for i, improper in enumerate(mol.impropers):
+        for i, improper in enumerate(mol.impropers.values()):
             lines.append('%5d\t%i\t%i\t%i\t%i\t%i' %
                 (i+1, improper.ff.type_num, improper.a+1, improper.b+1, improper.c+1, improper.d+1))
 
@@ -3144,7 +3170,7 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
             angle_ff_tmp = utils.Angle_ff(ff_type=angle_id[i], k=k_angle[angle_id[i]-1], theta0=theta0[angle_id[i]-1])
             utils.add_angle(mol, angle_atom[i][0]-1, angle_atom[i][1]-1, angle_atom[i][2]-1, ff=angle_ff_tmp)
     else:
-        setattr(mol, 'angles', [])
+        setattr(mol, 'angles', {})
 
     if 'dihedrals' in n_data.keys():
         for i in range(n_data['dihedrals']):
@@ -3152,14 +3178,14 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                                    m=m_dih[dihed_id[i]-1], n=n_dih[dihed_id[i]-1])
             utils.add_dihedral(mol, dihed_atom[i][0]-1, dihed_atom[i][1]-1, dihed_atom[i][2]-1, dihed_atom[i][3]-1, ff=dihed_ff_tmp)
     else:
-        setattr(mol, 'dihedrals', [])
+        setattr(mol, 'dihedrals', {})
 
     if 'impropers' in n_data.keys():
         for i in range(n_data['impropers']):
             impro_ff_tmp = utils.Improper_ff(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
             utils.add_improper(mol, impro_atom[i][0]-1, impro_atom[i][1]-1, impro_atom[i][2]-1, impro_atom[i][3]-1, ff=impro_ff_tmp)
     else:
-        setattr(mol, 'impropers', [])
+        setattr(mol, 'impropers', {})
 
     setattr(mol, 'cell', utils.Cell(cell_data['xhi'], cell_data['xlo'], cell_data['yhi'], cell_data['ylo'], cell_data['zhi'], cell_data['zlo']))
 

@@ -12,9 +12,9 @@ from scipy.stats import skew, kurtosis
 import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
-from ..core import poly, utils
+from ..core import poly, utils, const
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b1'
 
 
 class FF_descriptor():
@@ -94,7 +94,7 @@ class FF_descriptor():
 
         k_ang = []
         theta0 = []
-        for ang in mol.angles:
+        for ang in mol.angles.values():
             if ignoreH and (mol.GetAtomWithIdx(ang.a).GetSymbol() == 'H' or
                 mol.GetAtomWithIdx(ang.b).GetSymbol() == 'H' or mol.GetAtomWithIdx(ang.c).GetSymbol() == 'H'):
                 continue
@@ -103,7 +103,7 @@ class FF_descriptor():
 
         k_dih = []
         #phi0 = []
-        for dih in mol.dihedrals:
+        for dih in mol.dihedrals.values():
             if ignoreH and (mol.GetAtomWithIdx(dih.a).GetSymbol() == 'H' or mol.GetAtomWithIdx(dih.b).GetSymbol() == 'H' or
                 mol.GetAtomWithIdx(dih.c).GetSymbol() == 'H' or mol.GetAtomWithIdx(dih.d).GetSymbol() == 'H'):
                 continue
@@ -119,16 +119,14 @@ class FF_descriptor():
 
     def get_param_mp(self, smiles, mp=None, cyclic=10, ignoreH=False):
 
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [cyclic, self]
-        for smi in smiles:
-            args.append([smi, *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(get_param_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, cyclic, self, c] for smi in smiles]
+
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(get_param_mp_wrapper, args)
 
         # NaN padding for ff parameter dataset
         vp = max(list(map(len, [x[0] for x in results[:]])))
@@ -226,16 +224,14 @@ class FF_descriptor():
 
         if ratio is None:
             ratio = np.array([None]*len(smiles))
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [cyclic, ignoreH, self]
-        for i, smi in enumerate(smiles):
-            args.append([smi, ratio[i], *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(ffss_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, ratio[i], cyclic, ignoreH, self, c] for i, smi in enumerate(smiles)]
+
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(ffss_mp_wrapper, args)
 
         return results
 
@@ -370,16 +366,14 @@ class FF_descriptor():
 
         if ratio is None:
             ratio = np.array([None]*len(smiles))
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, self]
-        for i, smi in enumerate(smiles):
-            args.append([smi, ratio[i], *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(ffkm_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, ratio[i], nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, self, c] for i, smi in enumerate(smiles)]
+    
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(ffkm_mp_wrapper, args)
 
         return results
 
@@ -453,7 +447,8 @@ def ffss_mp_wrapper(args):
     flag = True
     mols = []
 
-    smi, ratio, cyclic, ignoreH, descobj = args
+    smi, ratio, cyclic, ignoreH, descobj, c = args
+    utils.restore_const(c)
 
     if type(smi) is not list:
         smi = [smi]
@@ -486,7 +481,8 @@ def ffkm_mp_wrapper(args):
     flag = True
     mols = []
 
-    smi, ratio, nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, descobj = args
+    smi, ratio, nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, descobj, c = args
+    utils.restore_const(c)
 
     if type(smi) is not list:
         smi = [smi]
@@ -518,7 +514,8 @@ def ffkm_mp_wrapper(args):
 
 
 def get_param_mp_wrapper(args):
-    smi, cyclic, descobj = args
+    smi, cyclic, descobj, c = args
+    utils.restore_const(c)
 
     try:
         if cyclic:

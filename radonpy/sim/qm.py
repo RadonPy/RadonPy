@@ -15,12 +15,13 @@ from rdkit import Geometry as Geom
 from ..core import utils, const, calc
 from .psi4_wrapper import Psi4w
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b1'
 
 
 def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, **kwargs):
+    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'},
+    total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.assign_charges
 
@@ -49,7 +50,8 @@ def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_di
     """
     flag = calc.assign_charges(mol, charge=charge, confId=confId, opt=opt, work_dir=work_dir, tmp_dir=tmp_dir, log_name=log_name,
             opt_method=opt_method, opt_basis=opt_basis, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
-            charge_method=charge_method, charge_basis=charge_basis, charge_basis_gen=charge_basis_gen, **kwargs)
+            charge_method=charge_method, charge_basis=charge_basis, charge_basis_gen=charge_basis_gen,
+            total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
     return flag
         
@@ -57,7 +59,7 @@ def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_di
 def conformation_search(mol, ff=None, nconf=1000, dft_nconf=4, etkdg_ver=2, rmsthresh=0.5, tfdthresh=0.02, clustering='TFD',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', log_name='mol', solver='lammps', solver_path=None, work_dir=None, tmp_dir=None,
-    etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000, **kwargs):
+    etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000, total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.conformation_search
 
@@ -93,7 +95,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=4, etkdg_ver=2, rmst
                 tfdthresh=tfdthresh, clustering=clustering, opt_method=opt_method, opt_basis=opt_basis,
                 opt_basis_gen=opt_basis_gen, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm, log_name=log_name,
                 solver=solver, solver_path=solver_path, work_dir=work_dir, tmp_dir=tmp_dir,
-                etkdg_omp=etkdg_omp, psi4_omp=psi4_omp, psi4_mp=psi4_mp, omp=omp, mpi=mpi, gpu=gpu, mm_mp=mm_mp, memory=memory, **kwargs)
+                etkdg_omp=etkdg_omp, psi4_omp=psi4_omp, psi4_mp=psi4_mp, omp=omp, mpi=mpi, gpu=gpu, mm_mp=mm_mp, memory=memory,
+                total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
     return mol, energy
 
@@ -101,7 +104,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=4, etkdg_ver=2, rmst
 def sp_prop(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='sp_prop',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-    sp_method='wb97m-d3bj', sp_basis='6-311G(d,p)', sp_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'}, **kwargs):
+    sp_method='wb97m-d3bj', sp_basis='6-311G(d,p)', sp_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
+    total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.sp_prop
 
@@ -131,6 +135,11 @@ def sp_prop(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='sp_p
             qm_dipole (x, y, z) (float, Debye)
     """
     e_prop = {}
+    
+    if type(total_charge) is int:
+        kwargs['charge'] = total_charge
+    if type(total_multiplicity) is int:
+        kwargs['multiplicity'] = total_multiplicity
 
     psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen, 
                     name=log_name, **kwargs)
@@ -162,7 +171,8 @@ def sp_prop(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='sp_p
 def polarizability(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='polarizability', mp=0,
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-    polar_method='wb97m-d3bj', polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'}, **kwargs):
+    polar_method='wb97m-d3bj', polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
+    total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.polarizability
 
@@ -190,6 +200,11 @@ def polarizability(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_nam
             Polarizability tensor (xx, yy, zz, xy, xz, yz) (float, angstrom^3)
     """
     polar_data = {}
+
+    if type(total_charge) is int:
+        kwargs['charge'] = total_charge
+    if type(total_multiplicity) is int:
+        kwargs['multiplicity'] = total_multiplicity
 
     psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
                     name=log_name, **kwargs)
@@ -230,7 +245,8 @@ def polarizability(mol, confId=0, opt=True, work_dir=None, tmp_dir=None, log_nam
 def refractive_index(mols, density, ratio=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='refractive_index', mp=1,
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-        polar_method='wb97m-d3bj', polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'}, **kwargs):
+        polar_method='wb97m-d3bj', polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.refractive_index
 
@@ -270,7 +286,8 @@ def refractive_index(mols, density, ratio=None, confId=0, opt=True, work_dir=Non
         polar_data = polarizability(mol, confId=confId, opt=opt, work_dir=work_dir, tmp_dir=tmp_dir, log_name='%s_%i' % (log_name, i), mp=mp,
                             opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen, 
                             geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
-                            polar_method=polar_method, polar_basis=polar_basis, polar_basis_gen=polar_basis_gen, **kwargs)
+                            polar_method=polar_method, polar_basis=polar_basis, polar_basis_gen=polar_basis_gen,
+                            total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
         a_list.append(polar_data['qm_polarizability'])
         for k in polar_data.keys(): ri_data['%s_monomer%i' % (k, i+1)] = polar_data[k]
@@ -284,7 +301,8 @@ def refractive_index(mols, density, ratio=None, confId=0, opt=True, work_dir=Non
 def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='abbe_number_cc2',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-        polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'}, **kwargs):
+        polar_basis='6-311+G(2d,p)', polar_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.abbe_number_cc2
 
@@ -317,6 +335,11 @@ def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=Non
             polarizability_486 (float, angstrom^3)
     """
     abbe_data = {}
+
+    if type(total_charge) is int:
+        kwargs['charge'] = total_charge
+    if type(total_multiplicity) is int:
+        kwargs['multiplicity'] = total_multiplicity
 
     mol_weight = calc.molecular_weight(mol)
 
@@ -397,7 +420,8 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='polarizability_sos_tddft.json', **kwargs):
+        n_state=1000, tda=False, tdscf_maxiter=60, td_output='polarizability_sos_tddft.json',
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.polarizability_sos
 
@@ -431,6 +455,11 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
     polar_data = []
     if omega is None: omega = [None]
     elif type(omega) is float or type(omega) is int: omega = [omega]
+
+    if type(total_charge) is int:
+        kwargs['charge'] = total_charge
+    if type(total_multiplicity) is int:
+        kwargs['multiplicity'] = total_multiplicity
 
     psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
                     name=log_name, **kwargs)
@@ -493,7 +522,8 @@ def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=Tr
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='refractive_index_sos_tddft.json', **kwargs):
+        n_state=1000, tda=False, tdscf_maxiter=60, td_output='refractive_index_sos_tddft.json',
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.refractive_index_sos
 
@@ -541,7 +571,8 @@ def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=Tr
                                 opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
                                 geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
                                 td_method=td_method, td_basis=td_basis, td_basis_gen=td_basis_gen,
-                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output, **kwargs)
+                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
+                                total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
         p_list.append(polar_data)
         a_list.append([p['qm_polarizability'] for p in polar_data])
@@ -564,7 +595,8 @@ def abbe_number_sos(mols, density, ratio=None, confId=0, opt=True, work_dir=None
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='abbe_number_sos_tddft.json', **kwargs):
+        n_state=1000, tda=False, tdscf_maxiter=60, td_output='abbe_number_sos_tddft.json',
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.abbe_number_sos
 
@@ -613,7 +645,8 @@ def abbe_number_sos(mols, density, ratio=None, confId=0, opt=True, work_dir=None
                                 log_name='%s_%i' % (log_name, i), opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
                                 geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
                                 td_method=td_method, td_basis=td_basis, td_basis_gen=td_basis_gen,
-                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output, **kwargs)
+                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
+                                total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
         alpha_656.append(polar_data[0]['qm_polarizability'])
         alpha_589.append(polar_data[1]['qm_polarizability'])

@@ -23,7 +23,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b1'
 
 MD_avail = True
 try:
@@ -49,7 +49,7 @@ if const.mpi4py_avail:
     try:
         from mpi4py.futures import MPIPoolExecutor
     except ImportError as e:
-        utils.radon_print('Cannot import mpi4py. Chang to const.mpi4py_avail = False. %s' % e, level=2)
+        utils.radon_print('Cannot import mpi4py. Change to const.mpi4py_avail = False. %s' % e, level=2)
         const.mpi4py_avail = False
 
 
@@ -314,10 +314,18 @@ def molecular_weight(mol, ignore_linker=True):
     return mol_weight
 
 
+def get_num_radicals(mol):
+    nr = 0
+    for atom in mol.GetAtoms():
+        nr += atom.GetNumRadicalElectrons()
+    return nr
+
+
 def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, **kwargs):
+    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'},
+    total_charge=None, total_multiplicity=None, **kwargs):
     """
     calc.assign_charges
 
@@ -357,6 +365,11 @@ def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, t
         if not psi4_avail:
             utils.radon_print('Cannot import psi4_wrapper. You can use psi4_wrapper by "conda install -c psi4 psi4 resp dftd3"', level=3)
             return False
+
+        if type(total_charge) is int:
+            kwargs['charge'] = total_charge
+        if type(total_multiplicity) is int:
+            kwargs['multiplicity'] = total_multiplicity
 
         psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
                         name=log_name, **kwargs)
@@ -737,7 +750,8 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
 def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmsthresh=0.5, tfdthresh=0.02, clustering='TFD',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', log_name='mol', solver='lammps', solver_path=None, work_dir=None, tmp_dir=None,
-        etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000, **kwargs):
+        etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000,
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     calc.conformation_search
 
@@ -819,10 +833,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
 
         if (mm_mp > 0 or const.mpi4py_avail) and nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(nconf):
-                args.append((mol_c, i, solver, solver_path, tmp_dir, omp, mpi, gpu))
+            c = utils.picklable_const()
+            args = [(mol_c, i, solver, solver_path, tmp_dir, omp, mpi, gpu, c) for i in range(nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -862,10 +874,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
         # Parallel execution of RDKit optimizations
         if (mm_mp > 0 or const.mpi4py_avail) and nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(nconf):
-                args.append((mol_c, prop, i))
+            c = utils.picklable_const()
+            args = [(mol_c, prop, i, c) for i in range(nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -966,19 +976,23 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
             Chem.SanitizeMol(mol_c)
             return mol_c, re_energy
 
+        if type(total_charge) is int:
+            kwargs['charge'] = total_charge
+        if type(total_multiplicity) is int:
+            kwargs['multiplicity'] = total_multiplicity
+
         if dft_nconf > nconf_new: dft_nconf = nconf_new
-        psi4mol = Psi4w(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen, memory=memory, **kwargs)
+        psi4mol = Psi4w(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                        memory=memory, **kwargs)
 
         utils.radon_print('Start optimization of %i conformers by DFT level.' % dft_nconf, level=1)
 
         # Parallel execution of psi4 optimizations
         if (psi4_mp > 0 or const.mpi4py_avail) and dft_nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(dft_nconf):
-                args.append((mol_c, i, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name,
-                            geom_iter, geom_conv, geom_algorithm, memory, kwargs))
+            c = utils.picklable_const()
+            args = [(mol_c, i, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name,
+                    geom_iter, geom_conv, geom_algorithm, memory, kwargs, c) for i in range(dft_nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -1014,7 +1028,7 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
                 utils.radon_print('DFT optimization of conformer %i' % i)
                 psi4mol.confId = i
                 psi4mol.name = '%s_conf_search_%i' % (log_name, i)
-                energy, _ = psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
+                energy, _ = psi4mol.optimize(ignore_conv_error=True, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
                 if not psi4mol.error_flag:
                     opt_success += 1
                 dft_energies.append((energy, i))
@@ -1054,7 +1068,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
 
 
 def _conf_search_lammps_worker(args):
-    mol, confId, solver, solver_path, work_dir, omp, mpi, gpu = args
+    mol, confId, solver, solver_path, work_dir, omp, mpi, gpu, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
 
@@ -1068,7 +1083,8 @@ def _conf_search_lammps_worker(args):
 
 
 def _conf_search_rdkit_worker(args):
-    mol, prop, confId = args
+    mol, prop, confId, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
     
@@ -1084,18 +1100,20 @@ def _conf_search_rdkit_worker(args):
 
 
 def _conf_search_psi4_worker(args):
-    mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs = args
+    mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
 
     error_flag = False
     utils.restore_picklable(mol)
-    psi4mol = Psi4w(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen, memory=memory, **kwargs)
+    psi4mol = Psi4w(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                    memory=memory, **kwargs)
     psi4mol.confId = confId
     psi4mol.name = '%s_conf_search_%i' % (log_name, confId)
     utils.radon_print('DFT optimization of conformer %i' % psi4mol.confId)
 
-    energy, coord = psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
+    energy, coord = psi4mol.optimize(ignore_conv_error=True, geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
     error_flag = psi4mol.error_flag
 
     del psi4mol
@@ -1313,17 +1331,17 @@ def energy_mm(mol, diele=1.0, coord=None, confId=0, **kwargs):
             energy_bond += b.GetDoubleProp('ff_k')*( (length - b.GetDoubleProp('ff_r0'))**2 )
             
     if calc_angle:
-        for ang in mol.angles:
+        for ang in mol.angles.values():
             theta = angle(mol.GetAtomWithIdx(ang.a), mol.GetAtomWithIdx(ang.b), mol.GetAtomWithIdx(ang.c), rad=True)
             energy_angle += ang.ff.k*( (theta - ang.ff.theta0_rad)**2 )
             
     if calc_dihedral:
-        for dih in mol.dihedrals:
+        for dih in mol.dihedrals.values():
             phi = dihedral(mol.GetAtomWithIdx(dih.a), mol.GetAtomWithIdx(dih.b), mol.GetAtomWithIdx(dih.c), mol.GetAtomWithIdx(dih.d), rad=True)
             energy_dihedral += np.sum(dih.ff.k*(1.0 + np.cos(dih.ff.n*phi - dih.ff.d0_rad)))
                 
     if calc_improper:
-        for imp in mol.impropers:
+        for imp in mol.impropers.values():
             phi = dihedral(mol.GetAtomWithIdx(imp.a), mol.GetAtomWithIdx(imp.b), mol.GetAtomWithIdx(imp.c), mol.GetAtomWithIdx(imp.d), rad=True)
             energy_improper += imp.ff.k*(1.0 + imp.ff.d0*cos(imp.ff.n*phi))
     

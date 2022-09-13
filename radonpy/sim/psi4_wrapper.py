@@ -14,13 +14,14 @@ import socket
 from distutils.version import LooseVersion
 import multiprocessing as MP
 import concurrent.futures as confu
+from rdkit import Chem
 from rdkit import Geometry as Geom
 import psi4
 import resp
 
-from ..core import const, utils
+from ..core import const, calc, utils
 
-__version__ = '0.2.0'
+__version__ = '0.3.0b1'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -29,7 +30,7 @@ if const.mpi4py_avail:
     try:
         from mpi4py.futures import MPIPoolExecutor
     except ImportError as e:
-        utils.radon_print('Cannot import mpi4py. Chang to const.mpi4py_avail = False. %s' % e, level=2)
+        utils.radon_print('Cannot import mpi4py. Change to const.mpi4py_avail = False. %s' % e, level=2)
         const.mpi4py_avail = False
 
 
@@ -44,8 +45,9 @@ class Psi4w():
         self.mol = utils.deepcopy_mol(mol)
         self.confId = confId
         self.wfn = kwargs.get('wfn', None)
-        self.charge = kwargs.get('charge', 0)
-        self.multiplicity = kwargs.get('multiplicity', 1)
+        self.charge = kwargs.get('charge', Chem.rdmolops.GetFormalCharge(self.mol))
+        nr = calc.get_num_radicals(self.mol)
+        self.multiplicity = kwargs.get('multiplicity', 1 if nr == 0 else 2 if nr%2 == 1 else 3)
 
         self.method = kwargs.get('method', 'wb97m-d3bj')
         self.basis = kwargs.get('basis', '6-31G(d,p)')
@@ -57,6 +59,7 @@ class Psi4w():
         self.scf_maxiter = kwargs.get('scf_maxiter', 128)
         self.scf_fail_on_maxiter = kwargs.get('scf_fail_on_maxiter', True)
         self.cc2wfn = kwargs.get('cc2wfn', None)
+        self.cache_level = kwargs.get('cache_level', 2)
         self.cwd = os.getcwd()
         self.error_flag = False
 
@@ -97,6 +100,11 @@ class Psi4w():
         return 'Psi4'
 
 
+    @property
+    def psi4_version(self):
+        return psi4.__version__
+
+
     def _init_psi4(self, *args, output=None):
 
         # Avoiding errors on Fugaku and in mpi4py
@@ -118,6 +126,8 @@ class Psi4w():
             'scf_type': self.scf_type,
             'maxiter': self.scf_maxiter,
             'fail_on_maxiter': self.scf_fail_on_maxiter,
+            'cachelevel': self.cache_level,
+            'CC_NUM_THREADS': self.num_threads,
             'basis': 'radonpy_basis'
             })
 
@@ -214,7 +224,7 @@ class Psi4w():
         return energy*const.au2kj # Hartree -> kJ/mol
 
 
-    def optimize(self, wfn=True, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
         """
         Psi4w.optimize
 
@@ -222,17 +232,45 @@ class Psi4w():
 
         Optional args:
             wfn: Return the wfn object of Psi4 (boolean)
+            freeze: Specify bond length, bond angle, or dihedral angles between atoms to be frozen
+            ignore_conv_error: If optimization has an convergence error,
+                                False: return np.nan, True: return energy without converging (boolean)
 
         Returns:
             energy (float, kJ/mol)
+            coord (ndarray(float), angstrom)
         """
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
-        psi4.set_options({
+        opt_dict = {
+            'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
-            'STEP_TYPE': geom_algorithm
-            })
+            'STEP_TYPE': geom_algorithm,
+            'OPTKING__ENSURE_BT_CONVERGENCE': True
+        }
+
+        # Frozen coordinates
+        frozen_bond = []
+        frozen_angle = []
+        frozen_dihedral = []
+        for atoms in freeze:
+            if len(atoms) == 2:
+                frozen_bond.append('%i %i' % (atoms[0]+1, atoms[1]+1))
+            elif len(atoms) == 3:
+                frozen_angle.append('%i %i %i' % (atoms[0]+1, atoms[1]+1, atoms[2]+1))
+            elif len(atoms) == 4:
+                frozen_dihedral.append('%i %i %i %i' % (atoms[0]+1, atoms[1]+1, atoms[2]+1, atoms[3]+1))
+            else:
+                utils.radon_print('Illegal length of array for input atoms. (2, 3, or 4)', level=3)
+        if len(frozen_bond) > 0:
+            opt_dict['OPTKING__FROZEN_DISTANCE'] = ' '.join(frozen_bond)
+        if len(frozen_angle) > 0:
+            opt_dict['OPTKING__FROZEN_BEND'] = ' '.join(frozen_angle)
+        if len(frozen_dihedral) > 0:
+            opt_dict['OPTKING__FROZEN_DIHEDRAL'] = ' '.join(frozen_dihedral)
+
+        psi4.set_options(opt_dict)
         dt1 = datetime.datetime.now()
         utils.radon_print('Psi4 optimization is running...', level=1)
 
@@ -247,14 +285,20 @@ class Psi4w():
 
         except psi4.OptimizationConvergenceError as e:
             utils.radon_print('Psi4 optimization convergence error. %s' % e, level=2)
-            energy = e.wfn.energy()
-            coord = np.asarray(e.wfn.molecule().geometry())
+            if ignore_conv_error:
+                energy = e.wfn.energy()
+            else:
+                energy = np.nan
+            coord = np.array(e.wfn.molecule().geometry()) * const.bohr2ang
             self.error_flag = True
 
         except psi4.SCFConvergenceError as e:
             utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
-            energy = e.wfn.energy()
-            coord = np.asarray(e.wfn.molecule().geometry())
+            if ignore_conv_error:
+                energy = e.wfn.energy()
+            else:
+                energy = np.nan
+            coord = np.array(e.wfn.molecule().geometry()) * const.bohr2ang
             self.error_flag = True
 
         except BaseException as e:
@@ -268,6 +312,120 @@ class Psi4w():
             self.mol.GetConformer(int(self.confId)).SetAtomPosition(i, Geom.Point3D(coord[i, 0], coord[i, 1], coord[i, 2]))
 
         return energy*const.au2kj, coord # Hartree -> kJ/mol
+
+
+    def scan(self, atoms, values=[], opt=True, ignore_conv_error=False, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+        """
+        Psi4w.scan
+
+        Scanning potential energy surface by Psi4
+
+        Args:
+            atoms: Array of index number of atoms in a scanning bond length, bond angle, or dihedral angle (list(int))
+
+        Optional args:
+            values: Array of bond length (angstrom), bond angle (degree), or dihedral angle (degree) values
+                    to be calculated potential energies (list(float))
+            opt: Perform optimization (boolean)
+            ignore_conv_error: If optimization has an convergence error,
+                                False: return np.nan, True: return energy without converging (boolean)
+
+        Returns:
+            energy (ndarray(float), kJ/mol)
+            coord (ndarray(float), angstrom)
+        """
+        energies = np.array([])
+        coords = []
+
+        opt_dict = {
+            'GEOM_MAXITER': geom_iter,
+            'G_CONVERGENCE': geom_conv,
+            'STEP_TYPE': geom_algorithm,
+            'OPTKING__ENSURE_BT_CONVERGENCE': True
+        }
+        if len(atoms) == 2:
+            opt_dict['OPTKING__FROZEN_DISTANCE'] = '%i %i' % (atoms[0]+1, atoms[1]+1)
+            scan_type = 'bond length'
+        elif len(atoms) == 3:
+            opt_dict['OPTKING__FROZEN_BEND'] = '%i %i %i' % (atoms[0]+1, atoms[1]+1, atoms[2]+1)
+            scan_type = 'bond angle'
+        elif len(atoms) == 4:
+            opt_dict['OPTKING__FROZEN_DIHEDRAL'] = '%i %i %i %i' % (atoms[0]+1, atoms[1]+1, atoms[2]+1, atoms[3]+1)
+            scan_type = 'dihedral angle'
+        else:
+            utils.radon_print('Illegal length of array for input atoms. (2, 3, or 4)', level=3)
+
+        dt1 = datetime.datetime.now()
+        utils.radon_print('Psi4 scan (%s) is running...' % scan_type, level=1)
+
+        for v in values:
+            log_name = None
+            conf = self.mol.GetConformer(self.confId)
+
+            if len(atoms) == 2:
+                Chem.rdMolTransforms.SetBondLength(conf, atoms[0], atoms[1], float(v))
+                log_name = './%s_psi4_scan%i-%i_%f.log' % (self.name, atoms[0], atoms[1], float(v))
+            elif len(atoms) == 3:
+                Chem.rdMolTransforms.SetAngleDeg(conf, atoms[0], atoms[1], atoms[2], float(v))
+                log_name = './%s_psi4_scan%i-%i-%i_%i.log' % (self.name, atoms[0], atoms[1], atoms[2], int(v))
+            elif len(atoms) == 4:
+                Chem.rdMolTransforms.SetDihedralDeg(conf, atoms[0], atoms[1], atoms[2], atoms[3], float(v))
+                log_name = './%s_psi4_scan%i-%i-%i-%i_%i.log' % (self.name, atoms[0], atoms[1], atoms[2], atoms[3], int(v))
+            
+            pmol = self._init_psi4('symmetry c1', output=log_name)
+            psi4.set_options(opt_dict)
+
+            try:
+                if opt:
+                    utils.radon_print('Psi4 optimization (%s = %f) is running...' % (scan_type, float(v)), level=1)
+                    dt3 = datetime.datetime.now()
+                    energy = psi4.optimize(self.method, molecule=pmol, return_wfn=False, **kwargs)
+                    dt4 = datetime.datetime.now()
+                    utils.radon_print('Normal termination of psi4 optimization. Elapsed time = %s' % str(dt4-dt3), level=1)
+                    coord = pmol.geometry().to_array() * const.bohr2ang
+                else:
+                    energy = psi4.energy(self.method, molecule=pmol, return_wfn=False, **kwargs)
+                    coord = pmol.geometry().to_array() * const.bohr2ang
+
+            except psi4.OptimizationConvergenceError as e:
+                utils.radon_print('Psi4 optimization convergence error. %s' % e, level=2)
+                if ignore_conv_error:
+                    energy = e.wfn.energy()
+                else:
+                    energy = np.nan
+                coord = np.array(e.wfn.molecule().geometry()) * const.bohr2ang
+                self.error_flag = True
+
+            except psi4.SCFConvergenceError as e:
+                utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
+                if ignore_conv_error:
+                    energy = e.wfn.energy()
+                else:
+                    energy = np.nan
+                coord = np.array(e.wfn.molecule().geometry()) * const.bohr2ang
+                self.error_flag = True
+
+            except BaseException as e:
+                self._fin_psi4()
+                self.error_flag = True
+                utils.radon_print('Error termination of psi4 optimization. %s' % e, level=3)
+
+            energies = np.append(energies, energy)
+            coords.append(coord)
+            if opt:
+                conf = Chem.rdchem.Conformer(self.mol.GetNumAtoms())
+                conf.Set3D(True)
+                for i in range(self.mol.GetNumAtoms()):
+                    self.mol.GetConformer(int(self.confId)).SetAtomPosition(i, Geom.Point3D(coord[i, 0], coord[i, 1], coord[i, 2]))
+                    conf.SetAtomPosition(i, Geom.Point3D(coord[i, 0], coord[i, 1], coord[i, 2]))
+                conf_id = self.mol.AddConformer(conf, assignId=True)
+
+            self._fin_psi4()
+
+        dt2 = datetime.datetime.now()
+        utils.radon_print('Normal termination of psi4 scan. Elapsed time = %s' % str(dt2-dt1), level=1)
+
+        return energies*const.au2kj, np.array(coords) # Hartree -> kJ/mol
 
 
     def force(self, wfn=True, **kwargs):
@@ -654,9 +812,10 @@ class Psi4w():
             cc2wfn_copy = self.cc2wfn
             self.cc2wfn = None
 
-            for i, e in enumerate([eps, -eps]):
-                for j, ax in enumerate(['x', 'y', 'z']):
-                    args.append([e, ax, self])
+            c = utils.picklable_const()
+            for e in [eps, -eps]:
+                for ax in ['x', 'y', 'z']:
+                    args.append([e, ax, self, c])
 
             # mpi4py
             if const.mpi4py_avail:
@@ -729,15 +888,17 @@ class Psi4w():
         return alpha, d_mu
 
 
-    def cc2_polar(self, omega=[], unit='nm', **kwargs):
+    def cc2_polar(self, omega=[], unit='nm', method='cc2', **kwargs):
         """
         psi4w.cc2_polar
 
-        Computation of dipole polarizability by linear response CC2 calculation
+        Computation of dipole polarizability by coupled cluster linear response calculation
 
         Optional args:
             omega: Computation of dynamic polarizability at the wave lengths (float, list)
             unit: Unit of omega (str; nm, au, ev, or hz)
+            method: Coupled cluster method (cc2 | ccsd)
+            cache_level: 
 
         Returns:
             Static or dynamic dipole polarizability (ndarray, angstrom^3)
@@ -749,12 +910,12 @@ class Psi4w():
             psi4.set_options({'omega': omega})
 
         dt1 = datetime.datetime.now()
-        utils.radon_print('Psi4 polarizability calculation (CC2) is running...', level=1)
+        utils.radon_print('Psi4 polarizability calculation (CC linear response) is running...', level=1)
 
         try:
-            energy, self.cc2wfn = psi4.properties('cc2', properties=['polarizability'], molecule=pmol, return_wfn=True)
+            energy, self.cc2wfn = psi4.properties(method, properties=['polarizability'], molecule=pmol, return_wfn=True, **kwargs)
             dt2 = datetime.datetime.now()
-            utils.radon_print('Normal termination of psi4 polarizability calculation (CC2). Elapsed time = %s' % str(dt2-dt1), level=1)
+            utils.radon_print('Normal termination of psi4 polarizability calculation (CC linear response). Elapsed time = %s' % str(dt2-dt1), level=1)
 
         except psi4.SCFConvergenceError as e:
             utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
@@ -764,7 +925,7 @@ class Psi4w():
         except BaseException as e:
             self._fin_psi4()
             self.error_flag = True
-            utils.radon_print('Error termination of psi4 polarizability calculation (CC2). %s' % e, level=3)
+            utils.radon_print('Error termination of psi4 polarizability calculation (CC linear response). %s' % e, level=3)
 
         self._fin_psi4()
 
@@ -773,7 +934,10 @@ class Psi4w():
 
         alpha = []
         if len(omega) == 0:
-            alpha.append( psi4.variable('CC2 DIPOLE POLARIZABILITY @ INF NM') * pv )
+            if method == 'cc2' or method == 'CC2':
+                alpha.append( psi4.variable('CC2 DIPOLE POLARIZABILITY @ INF NM') * pv )
+            elif method == 'ccsd' or method == 'CCSD':
+                alpha.append( psi4.variable('CCSD DIPOLE POLARIZABILITY @ INF NM') * pv )
         elif len(omega) > 0:
             for i in range(len(omega)-1):
                 if unit == 'NM' or unit == 'nm':
@@ -786,7 +950,11 @@ class Psi4w():
                     lamda = round( const.c / omega[i] * 1e9 )
                 else:
                     utils.radon_print('Illeagal input of unit = %s in cc2_polar.' % str(unit), level=3)
-                alpha.append( psi4.variable('CC2 DIPOLE POLARIZABILITY @ %iNM' % lamda) * pv )
+
+                if method == 'cc2' or method == 'CC2':
+                    alpha.append( psi4.variable('CC2 DIPOLE POLARIZABILITY @ %iNM' % lamda) * pv )
+                elif method == 'ccsd' or method == 'CCSD':
+                    alpha.append( psi4.variable('CCSD DIPOLE POLARIZABILITY @ %iNM' % lamda) * pv )
 
         return np.array(alpha)
 
@@ -806,7 +974,7 @@ class Psi4w():
         utils.radon_print('Psi4 polarizability calculation (CPHF/CPKS) is running...', level=1)
 
         try:
-            energy, self.wfn = psi4.properties(self.method, properties=['DIPOLE_POLARIZABILITIES'], molecule=pmol, return_wfn=True)
+            energy, self.wfn = psi4.properties(self.method, properties=['DIPOLE_POLARIZABILITIES'], molecule=pmol, return_wfn=True, **kwargs)
             dt2 = datetime.datetime.now()
             utils.radon_print('Normal termination of psi4 polarizability calculation (CPHF/CPKS). Elapsed time = %s' % str(dt2-dt1), level=1)
 
@@ -892,9 +1060,10 @@ class Psi4w():
             cc2wfn_copy = self.cc2wfn
             self.cc2wfn = None
 
-            for i, e in enumerate([eps, -eps]):
-                for j, ax in enumerate(['x', 'y', 'z']):
-                    args.append([e, ax, self])
+            c = utils.picklable_const()
+            for e in [eps, -eps]:
+                for ax in ['x', 'y', 'z']:
+                    args.append([e, ax, self, c])
 
             # mpi4py
             if const.mpi4py_avail:
@@ -1188,9 +1357,54 @@ class Psi4w():
         return float(psi4.variable('CC2 CORRELATION ENERGY'))
         
 
-def _polar_mp_worker(args):
-    eps, ax, psi4obj = args
+    @property
+    def ccsd_energy(self):
+        """
+        Psi4w.ccsd_energy
 
+        Returns:
+            CCSD total energy (float)
+        """
+        return float(psi4.variable('CCSD TOTAL ENERGY'))
+        
+
+    @property
+    def ccsd_corr_energy(self):
+        """
+        Psi4w.ccsd_corr_energy
+
+        Returns:
+            CCSD correlation energy (float)
+        """
+        return float(psi4.variable('CCSD CORRELATION ENERGY'))
+        
+
+    @property
+    def ccsd_t_energy(self):
+        """
+        Psi4w.ccsd_t_energy
+
+        Returns:
+            CCSD(T) total energy (float)
+        """
+        return float(psi4.variable('CCSD(T) TOTAL ENERGY'))
+        
+
+    @property
+    def ccsd_t_corr_energy(self):
+        """
+        Psi4w.ccsd_t_corr_energy
+
+        Returns:
+            CCSD(T) correlation energy (float)
+        """
+        return float(psi4.variable('CCSD(T) CORRELATION ENERGY'))
+        
+
+def _polar_mp_worker(args):
+    eps, ax, psi4obj, c = args
+    utils.restore_const(c)
+    
     i = 0 if eps > 0 else 1
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan
     error_flag = False
@@ -1235,7 +1449,8 @@ def _polar_mp_worker(args):
 
 
 def _cphf_hyperpolar_mp_worker(args):
-    eps, ax, psi4obj = args
+    eps, ax, psi4obj, c = args
+    utils.restore_const(c)
 
     i = 0 if eps > 0 else 1
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan

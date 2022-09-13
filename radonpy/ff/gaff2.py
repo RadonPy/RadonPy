@@ -7,10 +7,10 @@
 # ******************************************************************************
 
 import os
-from ..core.utils import radon_print
+from ..core import utils
 from .gaff import GAFF
 
-__version__ = '0.2.0'
+__version__ = '0.3.0b1'
 
 
 class GAFF2(GAFF):
@@ -34,6 +34,7 @@ class GAFF2(GAFF):
             db_file = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'ff_dat', 'gaff2.json')
         super().__init__(db_file)
         self.name = 'gaff2'
+        self.elctropositive_elements = {'N', 'P'}
 
         # Added atomic types in GAFF2
         alt_ptype_gaff2 = {
@@ -45,364 +46,446 @@ class GAFF2(GAFF):
         self.alt_ptype.update(alt_ptype_gaff2)
 
 
-    def assign_ptypes(self, mol):
+    def assign_ptypes_atom(self, p):
         """
-        GAFF2.assign_ptypes
+        GAFF2.assign_ptypes_atom
 
-        GAFF2 specific particle typing rules.
+        GAFF2 specific particle typing rules for atom.
 
         Args:
-            mol: rdkit mol object
+            p: rdkit atom object
 
         Returns:
             boolean
         """
         result_flag = True
-        mol.SetProp('pair_style', self.pair_style)
-        
-        for p in mol.GetAtoms():
-            ######################################
-            # Assignment routine of H
-            ######################################
-            if p.GetSymbol() == 'H':
-                if p.GetNeighbors()[0].GetSymbol() == 'O':
-                    water = False
-                    for pb in p.GetNeighbors():
-                        if pb.GetSymbol() == 'O' and pb.GetTotalNumHs(includeNeighbors=True) == 2:
-                            water = True
-                    if water:
-                        self.set_ptype(p, 'hw')
-                    else:
-                        self.set_ptype(p, 'ho')
-                        
-                elif p.GetNeighbors()[0].GetSymbol() == 'N':
-                    self.set_ptype(p, 'hn')
+
+        ######################################
+        # Assignment routine of H
+        ######################################
+        if p.GetSymbol() == 'H':
+            nb_sym = p.GetNeighbors()[0].GetSymbol()
+
+            if nb_sym == 'O':
+                water = False
+                for pb in p.GetNeighbors():
+                    if pb.GetSymbol() == 'O' and pb.GetTotalNumHs(includeNeighbors=True) == 2:
+                        water = True
+                if water:
+                    self.set_ptype(p, 'hw')
+                else:
+                    self.set_ptype(p, 'ho')
                     
-                elif p.GetNeighbors()[0].GetSymbol() == 'P':
-                    self.set_ptype(p, 'hp')
-                    
-                elif p.GetNeighbors()[0].GetSymbol() == 'S':
-                    self.set_ptype(p, 'hs')
-                    
-                elif p.GetNeighbors()[0].GetSymbol() == 'C':
-                    for pb in p.GetNeighbors():
-                        if pb.GetSymbol() == 'C':
-                            elctrwd = 0
-                            cation = False
-                            for pbb in pb.GetNeighbors():
-                                if pbb.GetSymbol() in ['N', 'O', 'F', 'Cl', 'Br', 'I']: 
-                                    elctrwd += 1
-                                if pbb.GetSymbol() in ['N', 'P'] and pbb.GetTotalDegree() == 4:
-                                    cation = True
-                            if cation:
-                                self.set_ptype(p, 'hx')
-                            elif elctrwd == 0:
-                                if str(pb.GetHybridization()) == 'SP2' or str(pb.GetHybridization()) == 'SP':
-                                    self.set_ptype(p, 'ha')
-                                else:
-                                    self.set_ptype(p, 'hc')
-                            elif pb.GetTotalDegree() == 4 and elctrwd == 1:
-                                self.set_ptype(p, 'h1')
-                            elif pb.GetTotalDegree() == 4 and elctrwd == 2:
-                                self.set_ptype(p, 'h2')
-                            elif pb.GetTotalDegree() == 4 and elctrwd == 3:
-                                self.set_ptype(p, 'h3')
-                            elif pb.GetTotalDegree() == 3 and elctrwd == 1:
-                                self.set_ptype(p, 'h4')
-                            elif pb.GetTotalDegree() == 3 and elctrwd == 2:
-                                self.set_ptype(p, 'h5')
+            elif nb_sym == 'N':
+                self.set_ptype(p, 'hn')
+                
+            elif nb_sym == 'P':
+                self.set_ptype(p, 'hp')
+                
+            elif nb_sym == 'S':
+                self.set_ptype(p, 'hs')
+                
+            elif nb_sym == 'C':
+                for pb in p.GetNeighbors():
+                    if pb.GetSymbol() == 'C':
+                        elctrwd = 0
+                        cation = False
+                        degree = pb.GetTotalDegree()
+
+                        for pbb in pb.GetNeighbors():
+                            pbb_degree = pbb.GetTotalDegree()
+                            pbb_sym = pbb.GetSymbol()
+                            if pbb_sym in self.elctrwd_elements and pbb_degree < 4: 
+                                elctrwd += 1
+                            if pbb_sym in self.elctropositive_elements and pbb_degree == 4:
+                                cation = True
+                        if cation:
+                            self.set_ptype(p, 'hx')
+                        elif elctrwd == 0:
+                            if str(pb.GetHybridization()) == 'SP2' or str(pb.GetHybridization()) == 'SP':
+                                self.set_ptype(p, 'ha')
                             else:
-                                radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                            % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2)
-                                result_flag = False
-
-                else:
-                    radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2)
-                    result_flag = False
-                                
-                                
-                                
-            ######################################
-            # Assignment routine of C
-            ######################################
-            elif p.GetSymbol() == 'C':
-                if str(p.GetHybridization()) == 'SP3':
-                    self.set_ptype(p, 'c3')
-                    
-                elif str(p.GetHybridization()) == 'SP2':
-                    carbonyl = False
-                    cs = False
-                    for pb in p.GetNeighbors():
-                        if pb.GetSymbol() == 'O':
-                            for b in pb.GetBonds():
-                                if (
-                                    (b.GetBeginAtom().GetIdx() == p.GetIdx() and b.GetEndAtom().GetIdx() == pb.GetIdx()) or
-                                    (b.GetBeginAtom().GetIdx() == pb.GetIdx() and b.GetEndAtom().GetIdx() == p.GetIdx())
-                                ):
-                                    if b.GetBondTypeAsDouble() == 2 and pb.GetTotalDegree() == 1:
-                                        carbonyl = True
-                        elif pb.GetSymbol() == 'S':
-                            for b in pb.GetBonds():
-                                if (
-                                    (b.GetBeginAtom().GetIdx() == p.GetIdx() and b.GetEndAtom().GetIdx() == pb.GetIdx()) or
-                                    (b.GetBeginAtom().GetIdx() == pb.GetIdx() and b.GetEndAtom().GetIdx() == p.GetIdx())
-                                ):
-                                    if b.GetBondTypeAsDouble() == 2 and pb.GetTotalDegree() == 1:
-                                        cs = True
-                    if carbonyl:
-                        self.set_ptype(p, 'c')  # Carbonyl carbon
-                    elif cs:
-                        self.set_ptype(p, 'cs')  # C=S group
-                    elif p.GetIsAromatic():
-                        self.set_ptype(p, 'ca')
-                    else:
-                        self.set_ptype(p, 'c2')  # Other sp2 carbon
-                        
-                elif str(p.GetHybridization()) == 'SP':
-                    self.set_ptype(p, 'c1')
-                    
-                else:
-                    radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
-                    result_flag = False
-                    
-                    
-                    
-            ######################################
-            # Assignment routine of N
-            ######################################
-            elif p.GetSymbol() == 'N':
-                if str(p.GetHybridization()) == 'SP':
-                    self.set_ptype(p, 'n1')
-                    
-                elif p.GetTotalDegree() == 2:
-                    bond_orders = [x.GetBondTypeAsDouble() for x in p.GetBonds()]
-                    if p.GetIsAromatic():
-                        self.set_ptype(p, 'nb')
-                    elif 2 in bond_orders:
-                        self.set_ptype(p, 'n2')
-                    else:
-                        radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                    % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
-                        result_flag = False
-                        
-                elif p.GetTotalDegree() == 3:
-                    amide = False
-                    aromatic_ring = False
-                    no2 = 0
-                    sp2 = 0
-                    for pb in p.GetNeighbors():
-                        if pb.GetSymbol() == 'C':
-                            if pb.GetIsAromatic():
-                                aromatic_ring = True
-                            for b in pb.GetBonds():
-                                bp = b.GetBeginAtom() if pb.GetIdx() == b.GetEndAtom().GetIdx() else b.GetEndAtom()
-                                if (bp.GetSymbol() == 'O' or bp.GetSymbol() == 'S') and b.GetBondTypeAsDouble() == 2:
-                                    amide = True
-                        elif pb.GetSymbol() == 'O':
-                            no2 += 1
-                        if str(pb.GetHybridization()) == 'SP2' or str(pb.GetHybridization()) == 'SP':
-                            sp2 += 1
-                    if no2 >= 2:
-                        self.set_ptype(p, 'no')
-                    elif amide:
-                        if p.GetTotalNumHs(includeNeighbors=True) == 1:
-                            self.set_ptype(p, 'ns')
-                        elif p.GetTotalNumHs(includeNeighbors=True) == 2:
-                            self.set_ptype(p, 'nt')
+                                self.set_ptype(p, 'hc')
+                        elif degree == 4 and elctrwd == 1:
+                            self.set_ptype(p, 'h1')
+                        elif degree == 4 and elctrwd == 2:
+                            self.set_ptype(p, 'h2')
+                        elif degree == 4 and elctrwd == 3:
+                            self.set_ptype(p, 'h3')
+                        elif degree == 3 and elctrwd == 1:
+                            self.set_ptype(p, 'h4')
+                        elif degree == 3 and elctrwd == 2:
+                            self.set_ptype(p, 'h5')
                         else:
-                            self.set_ptype(p, 'n')
-                        
-                    elif p.GetIsAromatic():
-                        self.set_ptype(p, 'na')
-                    elif sp2 >= 2:
-                        self.set_ptype(p, 'na')
-                    elif aromatic_ring:
-                        if p.GetTotalNumHs(includeNeighbors=True) == 1:
-                            self.set_ptype(p, 'nu')
-                        elif p.GetTotalNumHs(includeNeighbors=True) == 2:
-                            self.set_ptype(p, 'nv')
-                        else:
-                            self.set_ptype(p, 'nh')
-                        
-                    else:
-                        if p.GetTotalNumHs(includeNeighbors=True) == 1:
-                            self.set_ptype(p, 'n7')
-                        elif p.GetTotalNumHs(includeNeighbors=True) == 2:
-                            self.set_ptype(p, 'n8')
-                        elif p.GetTotalNumHs(includeNeighbors=True) == 3:
-                            self.set_ptype(p, 'n9') # NH3
-                        else:
-                            self.set_ptype(p, 'n3')
-                        
-                        
-                elif p.GetTotalDegree() == 4:
-                    if p.GetTotalNumHs(includeNeighbors=True) == 1:
-                        self.set_ptype(p, 'nx')
-                    elif p.GetTotalNumHs(includeNeighbors=True) == 2:
-                        self.set_ptype(p, 'ny')
-                    elif p.GetTotalNumHs(includeNeighbors=True) == 3:
-                        self.set_ptype(p, 'nz')
-                    elif p.GetTotalNumHs(includeNeighbors=True) == 4:
-                        self.set_ptype(p, 'n+') # NH4+
-                    else:
-                        self.set_ptype(p, 'n4')
-                    
-                else:
-                    radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
-                    result_flag = False
+                            utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                                        % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2)
+                            result_flag = False
 
-
-
-            ######################################
-            # Assignment routine of O
-            ######################################
-            elif p.GetSymbol() == 'O':
-                if p.GetTotalDegree() == 1:
-                    self.set_ptype(p, 'o')
-                elif p.GetTotalNumHs(includeNeighbors=True) == 2:
-                    self.set_ptype(p, 'ow')
-                elif p.GetTotalNumHs(includeNeighbors=True) == 1:
-                    self.set_ptype(p, 'oh')
-                else:
-                    self.set_ptype(p, 'os')
-
-
-
-            ######################################
-            # Assignment routine of F, Cl, Br, I
-            ######################################
-            elif p.GetSymbol() == 'F':
-                self.set_ptype(p, 'f')
-            elif p.GetSymbol() == 'Cl':
-                self.set_ptype(p, 'cl')
-            elif p.GetSymbol() == 'Br':
-                self.set_ptype(p, 'br')
-            elif p.GetSymbol() == 'I':
-                self.set_ptype(p, 'i')
-                
-                
-                
-            ######################################
-            # Assignment routine of P
-            ######################################
-            elif p.GetSymbol() == 'P':
-                if p.GetIsAromatic():
-                    self.set_ptype(p, 'pb')
-                    
-                elif p.GetTotalDegree() == 2:
-                    self.set_ptype(p, 'p2')
-                    
-                elif p.GetTotalDegree() == 3:
-                    bond_orders = [x.GetBondTypeAsDouble() for x in p.GetBonds()]
-                    if 2 in bond_orders:
-                        conj = False
-                        for pb in p.GetNeighbors():
-                            for b in pb.GetBonds():
-                                if b.GetBeginAtom().GetIdx() != p.GetIdx() and b.GetEndAtom().GetIdx() != p.GetIdx():
-                                    if b.GetBondTypeAsDouble() >= 1.5:
-                                        conj = True
-                        if conj:
-                            self.set_ptype(p, 'px')
-                        else:
-                            self.set_ptype(p, 'p4')
-                    else:
-                        self.set_ptype(p, 'p3')
-                        
-                elif p.GetTotalDegree() == 4:
-                    conj = False
-                    for pb in p.GetNeighbors():
-                        for b in pb.GetBonds():
-                            if b.GetBeginAtom().GetIdx() != p.GetIdx() and b.GetEndAtom().GetIdx() != p.GetIdx():
-                                if b.GetBondTypeAsDouble() >= 1.5:
-                                    conj = True
-                    if conj:
-                        self.set_ptype(p, 'py')
-                    else:
-                        self.set_ptype(p, 'p5')
-
-                elif p.GetTotalDegree() == 5 or p.GetTotalDegree() == 6:
-                    self.set_ptype(p, 'p5')
-                        
-                else:
-                    radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
-                    result_flag = False
-
-
-
-            ######################################
-            # Assignment routine of S
-            ######################################
-            elif p.GetSymbol() == 'S':
-                if p.GetTotalDegree() == 1:
-                    self.set_ptype(p, 's')
-                    
-                elif p.GetTotalDegree() == 2:
-                    bond_orders = [x.GetBondTypeAsDouble() for x in p.GetBonds()]
-                    if p.GetIsAromatic():
-                        self.set_ptype(p, 'ss')
-                    elif p.GetTotalNumHs(includeNeighbors=True) == 1:
-                        self.set_ptype(p, 'sh')
-                    elif 2 in bond_orders:
-                        self.set_ptype(p, 's2')
-                    else:
-                        self.set_ptype(p, 'ss')
-                    
-                elif p.GetTotalDegree() == 3:
-                    conj = False
-                    for pb in p.GetNeighbors():
-                        for b in pb.GetBonds():
-                            if b.GetBeginAtom().GetIdx() != p.GetIdx() and b.GetEndAtom().GetIdx() != p.GetIdx():
-                                if b.GetBondTypeAsDouble() >= 1.5:
-                                    conj = True
-                    if conj:
-                        self.set_ptype(p, 'sx')
-                    else:
-                        self.set_ptype(p, 's4')
-                        
-                elif p.GetTotalDegree() == 4:
-                    conj = False
-                    for pb in p.GetNeighbors():
-                        for b in pb.GetBonds():
-                            if b.GetBeginAtom().GetIdx() != p.GetIdx() and b.GetEndAtom().GetIdx() != p.GetIdx():
-                                if b.GetBondTypeAsDouble() >= 1.5:
-                                    conj = True
-                    if conj:
-                        self.set_ptype(p, 'sy')
-                    else:
-                        self.set_ptype(p, 's6')
-
-                elif p.GetTotalDegree() == 5 or p.GetTotalDegree() == 6:
-                    self.set_ptype(p, 's6')
-                        
-                else:
-                    radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
-                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
-                    result_flag = False
-
-
-            elif p.GetSymbol() == '*':
-                p.SetProp('ff_type', '*')
-                p.SetDoubleProp('ff_epsilon', 0.0)
-                p.SetDoubleProp('ff_sigma', 0.0)
-
-            ######################################
-            # Assignment error
-            ######################################
             else:
-                radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                            % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2)
+                result_flag = False
+                            
+                            
+                            
+        ######################################
+        # Assignment routine of C
+        ######################################
+        elif p.GetSymbol() == 'C':
+            hyb = str(p.GetHybridization())
+            
+            if hyb == 'SP3':
+                if p.IsInRingSize(3):
+                    self.set_ptype(p, 'cx')
+                elif p.IsInRingSize(4):
+                    self.set_ptype(p, 'cy')
+                else:
+                    self.set_ptype(p, 'c3')
+                
+            elif hyb == 'SP2':
+                p_idx = p.GetIdx()
+                carbonyl = False
+                cs = False
+                conj = 0
+                for pb in p.GetNeighbors():
+                    pb_sym = pb.GetSymbol()
+                    if pb_sym == 'O':
+                        pb_idx = pb.GetIdx()
+                        pb_degree = pb.GetTotalDegree()
+                        for b in pb.GetBonds():
+                            if (
+                                (b.GetBeginAtom().GetIdx() == p_idx and b.GetEndAtom().GetIdx() == pb_idx) or
+                                (b.GetBeginAtom().GetIdx() == pb_idx and b.GetEndAtom().GetIdx() == p_idx)
+                            ):
+                                if b.GetBondTypeAsDouble() == 2 and pb_degree == 1:
+                                    carbonyl = True
+                    elif pb_sym == 'S':
+                        pb_idx = pb.GetIdx()
+                        pb_degree = pb.GetTotalDegree()
+                        for b in pb.GetBonds():
+                            if (
+                                (b.GetBeginAtom().GetIdx() == p_idx and b.GetEndAtom().GetIdx() == pb_idx) or
+                                (b.GetBeginAtom().GetIdx() == pb_idx and b.GetEndAtom().GetIdx() == p_idx)
+                            ):
+                                if b.GetBondTypeAsDouble() == 2 and pb_degree == 1:
+                                    cs = True
+
+                for b in p.GetBonds():
+                    if b.GetIsConjugated():
+                        conj += 1
+
+                if carbonyl:
+                    self.set_ptype(p, 'c')  # Carbonyl carbon
+                elif cs:
+                    self.set_ptype(p, 'cs')  # C=S group
+                elif p.GetIsAromatic():
+                    self.set_ptype(p, 'ca')
+
+                    # For biphenyl head atom
+                    for b in p.GetBonds():
+                        if b.GetBondTypeAsDouble() == 1:
+                            bp = b.GetBeginAtom() if p_idx == b.GetEndAtom().GetIdx() else b.GetEndAtom()
+                            if bp.GetIsAromatic():
+                                self.set_ptype(p, 'cp')
+                                if bp.GetSymbol() == 'C':
+                                    self.set_ptype(bp, 'cp')
+
+                elif p.IsInRingSize(3):
+                    self.set_ptype(p, 'cu')
+                elif p.IsInRingSize(4):
+                    self.set_ptype(p, 'cv')
+                elif conj >= 2:
+                    if utils.is_in_ring(p, max_size=self.max_ring_size):
+                        self.set_ptype(p, 'cc')
+                    else:
+                        self.set_ptype(p, 'ce')
+                else:
+                    self.set_ptype(p, 'c2')  # Other sp2 carbon
+                    
+            elif hyb == 'SP':
+                conj = 0
+                for b in p.GetBonds():
+                    if b.GetIsConjugated():
+                        conj += 1
+
+                if conj >= 2:
+                    self.set_ptype(p, 'cg')
+                else:
+                    self.set_ptype(p, 'c1')
+                
+            else:
+                utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                            % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
+                result_flag = False
+                
+                
+                
+        ######################################
+        # Assignment routine of N
+        ######################################
+        elif p.GetSymbol() == 'N':
+            hyb = str(p.GetHybridization())
+            degree = p.GetTotalDegree()
+
+            if hyb == 'SP':
+                self.set_ptype(p, 'n1')
+                
+            elif degree == 2:
+                bond_orders = []
+                conj = 0
+                for b in p.GetBonds():
+                    bond_orders.append(b.GetBondTypeAsDouble())
+                    if b.GetIsConjugated():
+                        conj += 1
+
+                if p.GetIsAromatic():
+                    self.set_ptype(p, 'nb')
+                elif 2 in bond_orders:
+                    if conj >= 2:
+                        if utils.is_in_ring(p, max_size=self.max_ring_size):
+                            self.set_ptype(p, 'nc')
+                        else:
+                            self.set_ptype(p, 'ne')
+                    else:
+                        self.set_ptype(p, 'n2')
+                else:
+                    utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                                % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
+                    result_flag = False
+                    
+            elif degree == 3:
+                amide = False
+                aromatic_ring = False
+                no2 = 0
+                sp2 = 0
+                for pb in p.GetNeighbors():
+                    pb_sym = pb.GetSymbol()
+                    pb_hyb = str(pb.GetHybridization())
+
+                    if pb_sym == 'C':
+                        if pb.GetIsAromatic():
+                            aromatic_ring = True
+                        for b in pb.GetBonds():
+                            bp = b.GetBeginAtom() if pb.GetIdx() == b.GetEndAtom().GetIdx() else b.GetEndAtom()
+                            if (bp.GetSymbol() == 'O' or bp.GetSymbol() == 'S') and b.GetBondTypeAsDouble() == 2:
+                                amide = True
+                    elif pb_sym == 'O':
+                        no2 += 1
+                    if pb_hyb == 'SP2' or pb_hyb == 'SP':
+                        sp2 += 1
+                if no2 >= 2:
+                    self.set_ptype(p, 'no')
+                elif amide:
+                    numHs = p.GetTotalNumHs(includeNeighbors=True)
+                    if numHs == 1:
+                        self.set_ptype(p, 'ns')
+                    elif numHs == 2:
+                        self.set_ptype(p, 'nt')
+                    else:
+                        self.set_ptype(p, 'n')
+                    
+                elif p.GetIsAromatic():
+                    self.set_ptype(p, 'na')
+                elif sp2 >= 2:
+                    self.set_ptype(p, 'na')
+                elif aromatic_ring:
+                    numHs = p.GetTotalNumHs(includeNeighbors=True)
+                    if numHs == 1:
+                        self.set_ptype(p, 'nu')
+                    elif numHs == 2:
+                        self.set_ptype(p, 'nv')
+                    else:
+                        self.set_ptype(p, 'nh')
+                    
+                else:
+                    numHs = p.GetTotalNumHs(includeNeighbors=True)
+                    if numHs == 1:
+                        self.set_ptype(p, 'n7')
+                    elif numHs == 2:
+                        self.set_ptype(p, 'n8')
+                    elif numHs == 3:
+                        self.set_ptype(p, 'n9') # NH3
+                    else:
+                        self.set_ptype(p, 'n3')
+                    
+                    
+            elif degree == 4:
+                numHs = p.GetTotalNumHs(includeNeighbors=True)
+                if numHs == 1:
+                    self.set_ptype(p, 'nx')
+                elif numHs == 2:
+                    self.set_ptype(p, 'ny')
+                elif numHs == 3:
+                    self.set_ptype(p, 'nz')
+                elif numHs == 4:
+                    self.set_ptype(p, 'n+') # NH4+
+                else:
+                    self.set_ptype(p, 'n4')
+                
+            else:
+                utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
                             % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
                 result_flag = False
 
 
-        ###########################################
-        # Assignment of special atom type in GAFF2
-        ###########################################
-        if result_flag: self.assign_special_ptype(mol)
-        
+
+        ######################################
+        # Assignment routine of O
+        ######################################
+        elif p.GetSymbol() == 'O':
+            if p.GetTotalDegree() == 1:
+                self.set_ptype(p, 'o')
+            elif p.GetTotalNumHs(includeNeighbors=True) == 2:
+                self.set_ptype(p, 'ow')
+            elif p.GetTotalNumHs(includeNeighbors=True) == 1:
+                self.set_ptype(p, 'oh')
+            else:
+                self.set_ptype(p, 'os')
+
+
+
+        ######################################
+        # Assignment routine of F, Cl, Br, I
+        ######################################
+        elif p.GetSymbol() == 'F':
+            self.set_ptype(p, 'f')
+        elif p.GetSymbol() == 'Cl':
+            self.set_ptype(p, 'cl')
+        elif p.GetSymbol() == 'Br':
+            self.set_ptype(p, 'br')
+        elif p.GetSymbol() == 'I':
+            self.set_ptype(p, 'i')
+            
+            
+            
+        ######################################
+        # Assignment routine of P
+        ######################################
+        elif p.GetSymbol() == 'P':
+            p_idx = p.GetIdx()
+            degree = p.GetTotalDegree()
+
+            if p.GetIsAromatic():
+                self.set_ptype(p, 'pb')
+                
+            elif degree == 2:
+                conj = 0
+                for b in p.GetBonds():
+                    if b.GetIsConjugated():
+                        conj += 1
+
+                if conj >= 2:
+                    if utils.is_in_ring(p, max_size=self.max_ring_size):
+                        self.set_ptype(p, 'pc')
+                    else:
+                        self.set_ptype(p, 'pe')
+                else:
+                    self.set_ptype(p, 'p2')
+                
+            elif degree == 3:
+                bond_orders = [x.GetBondTypeAsDouble() for x in p.GetBonds()]
+                if 2 in bond_orders:
+                    conj = False
+                    for pb in p.GetNeighbors():
+                        for b in pb.GetBonds():
+                            if b.GetBeginAtom().GetIdx() != p_idx and b.GetEndAtom().GetIdx() != p_idx:
+                                if b.GetBondTypeAsDouble() >= 1.5:
+                                    conj = True
+                    if conj:
+                        self.set_ptype(p, 'px')
+                    else:
+                        self.set_ptype(p, 'p4')
+                else:
+                    self.set_ptype(p, 'p3')
+                    
+            elif degree == 4:
+                conj = False
+                for pb in p.GetNeighbors():
+                    for b in pb.GetBonds():
+                        if b.GetBeginAtom().GetIdx() != p_idx and b.GetEndAtom().GetIdx() != p_idx:
+                            if b.GetBondTypeAsDouble() >= 1.5:
+                                conj = True
+                if conj:
+                    self.set_ptype(p, 'py')
+                else:
+                    self.set_ptype(p, 'p5')
+
+            elif degree == 5 or degree == 6:
+                self.set_ptype(p, 'p5')
+                    
+            else:
+                utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                            % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
+                result_flag = False
+
+
+
+        ######################################
+        # Assignment routine of S
+        ######################################
+        elif p.GetSymbol() == 'S':
+            p_idx = p.GetIdx()
+            degree = p.GetTotalDegree()
+
+            if degree == 1:
+                self.set_ptype(p, 's')
+                
+            elif degree == 2:
+                bond_orders = [x.GetBondTypeAsDouble() for x in p.GetBonds()]
+                if p.GetIsAromatic():
+                    self.set_ptype(p, 'ss')
+                elif p.GetTotalNumHs(includeNeighbors=True) == 1:
+                    self.set_ptype(p, 'sh')
+                elif 2 in bond_orders:
+                    self.set_ptype(p, 's2')
+                else:
+                    self.set_ptype(p, 'ss')
+                
+            elif degree == 3:
+                conj = False
+                for pb in p.GetNeighbors():
+                    for b in pb.GetBonds():
+                        if b.GetBeginAtom().GetIdx() != p_idx and b.GetEndAtom().GetIdx() != p_idx:
+                            if b.GetBondTypeAsDouble() >= 1.5:
+                                conj = True
+                if conj:
+                    self.set_ptype(p, 'sx')
+                else:
+                    self.set_ptype(p, 's4')
+                    
+            elif degree == 4:
+                conj = False
+                for pb in p.GetNeighbors():
+                    for b in pb.GetBonds():
+                        if b.GetBeginAtom().GetIdx() != p_idx and b.GetEndAtom().GetIdx() != p_idx:
+                            if b.GetBondTypeAsDouble() >= 1.5:
+                                conj = True
+                if conj:
+                    self.set_ptype(p, 'sy')
+                else:
+                    self.set_ptype(p, 's6')
+
+            elif degree == 5 or degree == 6:
+                self.set_ptype(p, 's6')
+                
+            else:
+                utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                            % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
+                result_flag = False
+
+
+        elif p.GetSymbol() == '*':
+            p.SetProp('ff_type', '*')
+            p.SetDoubleProp('ff_epsilon', 0.0)
+            p.SetDoubleProp('ff_sigma', 0.0)
+
+        ######################################
+        # Assignment error
+        ######################################
+        else:
+            utils.radon_print('Cannot assignment index %i, element %s, num. of bonds %i, hybridization %s'
+                        % (p.GetIdx(), p.GetSymbol(), p.GetTotalDegree(), str(p.GetHybridization())), level=2 )
+            result_flag = False
         
         return result_flag
-        
+
