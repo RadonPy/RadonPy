@@ -18,7 +18,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 MD_avail = True
 try:
@@ -1537,8 +1537,7 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
-        # FIXME: replicate_cell is not defined
-        cell = replicate_cell(mol, 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mol, 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
             cell_copy = utils.deepcopy_mol(cell)
@@ -1630,8 +1629,7 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
 
     for k in range(m):
         cell_n = cell.GetNumAtoms()
-        # FIXME: replicate_cell is not defined
-        cell = replicate_cell(mols[0], 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mols[0], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n), desc='[Unit cell generation %i/%i]' % (k+1, m), disable=const.tqdm_disable):
             for j, mol in enumerate(mols):
@@ -1736,8 +1734,7 @@ def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None,
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
-        # FIXME: replicate_cell is not defined
-        cell = replicate_cell(mols[mol_index[j, 0]], 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mols[mol_index[j, 0]], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
             cell_copy = utils.deepcopy_mol(cell)

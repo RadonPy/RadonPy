@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 mdtraj_avail = True
 try:

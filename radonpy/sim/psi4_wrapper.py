@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, utils
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -913,9 +913,8 @@ class Psi4w():
 
         except psi4.SCFConvergenceError as e:
             utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
-            # FIXME: p_mu is not defined
-            p_mu[i, 1] = np.array([np.nan, np.nan, np.nan])
             self.error_flag = True
+            return [np.nan]
 
         except BaseException as e:
             self._fin_psi4()
