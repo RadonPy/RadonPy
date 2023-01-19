@@ -16,7 +16,7 @@ from rdkit import Geometry as Geom
 from ...core import poly, utils, calc, const
 from .. import lammps, preset
 
-__version__ = '0.2.1'
+__version__ = '0.2.3'
 
 
 class NEMD_MP(preset.Preset):
@@ -1062,8 +1062,7 @@ quit
             else:
                 os.fsync(fh.fileno())
 
-        # FIXME: mol_sc is not defined
-        utils.MolToPDBFile(mol_sc, os.path.join(self.work_dir, self.pdb_file))
+        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
 
         return True
 
@@ -1125,6 +1124,9 @@ class NEMD_Langevin(preset.Preset):
         repo = kwargs.get('rep_other', 1)
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
 
+        self.make_lammps_input(confId=confId, step=step, time_step=time_step, h_temp=h_temp, l_temp=l_temp, rep=rep, rep_other=repo,
+            decomp=decomp, step_decomp=step_decomp, decomp_intermol=decomp_intermol)
+
         dt1 = datetime.datetime.now()
         utils.radon_print('Thermal conductive simulation (Langevin thermostat NEMD) by LAMMPS is running...', level=1)
 
@@ -1163,7 +1165,7 @@ class NEMD_Langevin(preset.Preset):
         return self.mol
 
 
-    def make_lammps_input(self, confId=0, step=5000000, time_step=0.2, temp=300.0, rep=3, rep_other=1,
+    def make_lammps_input(self, confId=0, step=5000000, time_step=0.2, h_temp=320.0, l_temp=280.0, rep=3, rep_other=1,
                           decomp=False, step_decomp=500000, decomp_intermol=False, **kwargs):
         
         seed1 = np.random.randint(1000, 999999)
@@ -1182,8 +1184,8 @@ class NEMD_Langevin(preset.Preset):
         in_strings += 'variable        TimeSt  equal  %f\n' % (time_step)
         in_strings += 'variable        NStep   equal  %i\n' % (step)
         in_strings += 'variable        NStepd  equal  %i\n' % (step_decomp)
-        in_strings += 'variable        Htemp   equal  %f\n' % (h_temp)  # FIXME: undefined
-        in_strings += 'variable        Ltemp   equal  %f\n' % (l_temp)  # FIXME: undefined
+        in_strings += 'variable        Htemp   equal  %f\n' % (h_temp)
+        in_strings += 'variable        Ltemp   equal  %f\n' % (l_temp)
         in_strings += 'variable        dataf   string %s\n' % (self.dat_file)
         in_strings += 'variable        seed1   equal  %i\n' % (seed1)
         in_strings += 'variable        seed2   equal  %i\n' % (seed2)
@@ -1648,8 +1650,7 @@ class NEMD_Langevin_Analyze(lammps.Analyze):
             values = ((df.sum(axis=0)/df.iloc[:, 0].sum(axis=0)).to_numpy())*tc
             keys=['TC_all', 'TC_ke', 'TC_pe', 'TC_pair', 'TC_bond', 'TC_angle', 'TC_dihed', 'TC_improper', 'TC_kspace', 'TC_fix']
         elif len(df.iloc[0, :]) == 11:
-            all_l_tmp = df_l.iloc[:, [0, 1, 2, 5, 6, 7, 8, 9, 10]].sum(axis=1).to_numpy()  # FIXME: df_l is not defined
-            all_r_tmp = df_r.iloc[:, [0, 1, 2, 5, 6, 7, 8, 9, 10]].sum(axis=1).to_numpy()  # FIXME: df_r is not defined
+            all_tmp = df.iloc[:, [0, 1, 2, 5, 6, 7, 8, 9, 10]].sum(axis=1).to_numpy()
             values = ((df.sum(axis=0)/all_tmp.sum(axis=0)).to_numpy())*tc
             keys=['TC_ke', 'TC_pe', 'TC_pair', 'TC_pair_inter', 'TC_pair_intra',
                   'TC_bond', 'TC_angle', 'TC_dihed', 'TC_improper', 'TC_kspace', 'TC_fix']

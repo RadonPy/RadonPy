@@ -12,7 +12,7 @@ import multiprocessing as MP
 from rdkit import Chem
 from ..core import poly, utils
 
-__version__ = '0.2.1'
+__version__ = '0.2.3'
 
 
 class FF_descriptor():
@@ -475,8 +475,7 @@ def ffss_mp_wrapper(args):
             desc = np.full(len(descobj.ffss_desc_names()), np.nan)
     except:
         utils.radon_print('Fail to calculate descriptor. %s' % (','.join(smi)), level=2)
-        # FIXME: nk is not defined
-        desc = np.full(len(descobj.ffkm_desc_names(nk=nk)), np.nan)
+        desc = np.full(len(descobj.ffss_desc_names()), np.nan)
 
     return desc
 

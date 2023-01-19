@@ -10,14 +10,13 @@ import os
 import psutil
 from copy import deepcopy
 from itertools import permutations
-import psutil
 import numpy as np
 import pickle
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from . import const
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 
 class Angle():
