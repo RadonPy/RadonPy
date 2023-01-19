@@ -6,11 +6,9 @@
 # ff.descriptor module
 # ******************************************************************************
 
-import os
 import numpy as np
 from scipy.stats import skew, kurtosis
 import multiprocessing as MP
-import concurrent.futures as confu
 from rdkit import Chem
 from ..core import poly, utils
 

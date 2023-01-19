@@ -8,11 +8,9 @@
 
 import numpy as np
 import pandas as pd
-from math import sqrt, log10
 from copy import deepcopy
 import re
 import random
-import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
 from rdkit.Chem import AllChem

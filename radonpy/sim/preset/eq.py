@@ -11,7 +11,6 @@ import glob
 import re
 import datetime
 import numpy as np
-from rdkit import Geometry as Geom
 from ...core import calc, const, utils
 from .. import lammps, preset
 from ..md import MD
