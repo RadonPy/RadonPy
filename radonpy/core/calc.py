@@ -647,7 +647,7 @@ def vdw_volume(mol, confId=0, method='grid', radii='rdkit', gridSpacing=0.2):
         return np.sum(V_vdw)
     
     else:
-        radon_print('Illegal input of method = %s' % method, level=3)
+        utils.radon_print('Illegal input of method = %s' % method, level=3)
         return np.nan
 
 
@@ -717,7 +717,7 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
     """
 
     if not hasattr(mol, 'cell'):
-        radon_print('The cell attribute of the input Mol object is undefined', level=2)
+        utils.radon_print('The cell attribute of the input Mol object is undefined', level=2)
         return np.nan
 
     #coord = wrap_mol(mol, confId=confId)

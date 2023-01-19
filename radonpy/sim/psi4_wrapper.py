@@ -913,6 +913,7 @@ class Psi4w():
 
         except psi4.SCFConvergenceError as e:
             utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
+            # FIXME: p_mu is not defined
             p_mu[i, 1] = np.array([np.nan, np.nan, np.nan])
             self.error_flag = True
 
@@ -937,9 +938,9 @@ class Psi4w():
                 if unit == 'NM' or unit == 'nm':
                     lamda = round(omega[i])
                 elif unit == 'AU' or unit == 'au':
-                    lamda = round( (const.h * const.c) / (omega[i] * au2ev * const.e) * 1e9 )
+                    lamda = round( (const.h * const.c) / (omega[i] * const.au2ev * const.e) * 1e9 )
                 elif unit == 'EV' or unit == 'ev':
-                    lamda = round( (const.h * const.c) / (omega[i] * au2kj) * 1e6 )
+                    lamda = round( (const.h * const.c) / (omega[i] * const.au2kj) * 1e6 )
                 elif unit == 'HZ' or unit == 'hz':
                     lamda = round( const.c / omega[i] * 1e9 )
                 else:
