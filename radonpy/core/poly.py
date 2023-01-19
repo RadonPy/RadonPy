@@ -8,11 +8,9 @@
 
 import numpy as np
 import pandas as pd
-from math import sqrt, log10
 from copy import deepcopy
 import re
 import random
-import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -1539,6 +1537,7 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
+        # FIXME: replicate_cell is not defined
         cell = replicate_cell(mol, 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
@@ -1631,6 +1630,7 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
 
     for k in range(m):
         cell_n = cell.GetNumAtoms()
+        # FIXME: replicate_cell is not defined
         cell = replicate_cell(mols[0], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n), desc='[Unit cell generation %i/%i]' % (k+1, m), disable=const.tqdm_disable):
@@ -1736,6 +1736,7 @@ def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None,
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
+        # FIXME: replicate_cell is not defined
         cell = replicate_cell(mols[mol_index[j, 0]], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
@@ -3033,7 +3034,7 @@ def _ff_test_mp_worker(args):
 def monomerization_smiles(smiles, min_length=1):
     
     if smiles.count('*') != 2:
-        utils.radon_print('Illegal number of connecting points in SMILES. %s' % smiles_in, level=2)
+        utils.radon_print('Illegal number of connecting points in SMILES. %s' % smiles, level=2)
         return smiles
 
     smi = smiles.replace('[*]', '[3H]')

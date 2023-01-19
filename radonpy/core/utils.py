@@ -7,14 +7,14 @@
 # ******************************************************************************
 
 import os
-import sys
 import psutil
 from copy import deepcopy
+from itertools import permutations
+import psutil
 import numpy as np
 import pickle
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit import Geometry as Geom
 from . import const
 
 __version__ = '0.2.2'

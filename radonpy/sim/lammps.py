@@ -753,7 +753,7 @@ class LAMMPS():
 
 
     def make_input_efield(self, md, wf, i, indata, unfix, nounfix=False):
-        evalue = wf.efield_value if efield_freq == 0.0 else 'v_efac'
+        evalue = wf.efield_value if wf.efield_freq == 0.0 else 'v_efac'
         if wf.efield_axis == 'x':
             ex = evalue
             ey = 0.0
@@ -790,8 +790,8 @@ class LAMMPS():
         if wf.efield_x:
             ez = wf.efield_z
 
-        if efield_freq != 0.0:
-            indata.append('variable efac equal %f*sin(2*PI*%f*time*1e-15)' % (wf.efield_value, efield_freq))
+        if wf.efield_freq != 0.0:
+            indata.append('variable efac equal %f*sin(2*PI*%f*time*1e-15)' % (wf.efield_value, wf.efield_freq))
         indata.append('fix EF%i all efield %s %s %s' % (i+1, ex, ey, ez))
         if not nounfix:
             unfix.append('unfix EF%i' % (i+1))
