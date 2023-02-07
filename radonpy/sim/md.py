@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .lammps import LAMMPS, Analyze
 from ..core import calc, utils
 
-__version__ = '0.2.0'
+__version__ = '0.2.3'
 
 
 class MD():
@@ -213,9 +213,30 @@ class Dynamics():
         return False
 
 
-    def add_timeave(self, var, Nevery=1, Nstep=1000):
-        # Under development
+    def add_variable(self, var):
+        # variable
+        self.variable = True
+        self.variable_name = []
+        self.variable_style = []
+        self.variable_args = []
+
+        for v in var:
+            self.variable_name.append(v[0])
+            self.variable_style.append(v[1])
+            self.variable_args.append(v[2:])
+
+        return False
+
+
+    def add_timeave(self, name=None, var=[], nevery=1, nfreq=1000, nstep=1000, nounfix=False):
         # fix ave/time
+        self.timeave = True
+        self.timeave_name = name
+        self.timeave_var = var
+        self.timeave_nevery = nevery
+        self.timeave_nfreq = nfreq
+        self.timeave_nstep = nstep
+        self.timeave_nounfix = nounfix
         return False
 
 

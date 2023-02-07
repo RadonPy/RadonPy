@@ -5,8 +5,9 @@
 # ******************************************************************************
 # core.const module
 # ******************************************************************************
+import os
 
-__version__ = '0.2.1'
+__version__ = '0.2.3'
 
 print_level = 1
 tqdm_disable = True
@@ -17,6 +18,9 @@ check_package_disable = False
 
 # Use mpi4py
 mpi4py_avail = False
+
+# Path to LAMMPS binary
+lammps_exec = os.getenv('LAMMPS_EXEC', 'lmp_mpi')
 
 # %i: number of process
 mpi_cmd = 'mpirun -n %i'

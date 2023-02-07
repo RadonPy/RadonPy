@@ -860,7 +860,8 @@ def random_copolymerize_rw_mp(mols, n, ratio, ratio_type='exact', tacticity='ata
                 retry=10, retry_step=100, dist_min=0.7, opt='rdkit', ff=None, work_dir=None, omp=1, mpi=1, gpu=0, nchain=10, mp=10):
 
     for i in range(len(mols)): utils.picklable(mols[i])
-    args = [(mols, n, ratio, ratio_type, tacticity, atac_ratio, retry, retry_step, dist_min, opt, ff, work_dir, omp, mpi, gpu) for i in range(nchain)]
+    c = utils.picklable_const()
+    args = [(mols, n, ratio, ratio_type, tacticity, atac_ratio, retry, retry_step, dist_min, opt, ff, work_dir, omp, mpi, gpu, c) for i in range(nchain)]
 
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_random_copolymerize_rw_mp_worker, args)
@@ -873,7 +874,8 @@ def random_copolymerize_rw_mp(mols, n, ratio, ratio_type='exact', tacticity='ata
 
 
 def _random_copolymerize_rw_mp_worker(args):
-    (mols, n, ratio, ratio_type, tacticity, atac_ratio, retry, retry_step, dist_min, opt, ff, work_dir, omp, mpi, gpu) = args
+    (mols, n, ratio, ratio_type, tacticity, atac_ratio, retry, retry_step, dist_min, opt, ff, work_dir, omp, mpi, gpu, c) = args
+    utils.restore_const(c)
     for i in range(len(mols)): utils.restore_picklable(mols[i])
     poly = random_copolymerize_rw(mols, n, ratio, ratio_type=ratio_type, tacticity=tacticity, atac_ratio=atac_ratio,
                 retry=retry, retry_step=retry_step, dist_min=dist_min, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
@@ -2756,7 +2758,7 @@ def make_linearpolymer(smiles, n=2, terminal='C'):
     return poly_smiles
 
 
-def make_cyclicpolymer(smiles, n=2, return_mol=False):
+def make_cyclicpolymer(smiles, n=2, return_mol=False, removeHs=False):
     """
     poly.make_cyclicpolymer
 
@@ -2804,11 +2806,54 @@ def make_cyclicpolymer(smiles, n=2, return_mol=False):
 
     Chem.SanitizeMol(mol)
 
+    if removeHs:
+        try:
+            mol = Chem.RemoveHs(mol)
+        except:
+            return None
+
     if return_mol:
         return mol
     else:
         poly_smiles = Chem.MolToSmiles(mol)
         return poly_smiles
+
+
+def make_cyclicpolymer_mp(smiles, n=2, return_mol=False, removeHs=False, mp=None):
+    """
+    poly.make_cyclicpolymer_mp
+
+    Multiprocessing version of make_cyclicpolymer
+
+    Args:
+        smiles: SMILES (list, str)
+        n: Polimerization degree (int)
+        return_mol: Return Mol object (True) or SMILES strings (False)
+        mp: Number of process (int)
+
+    Returns:
+        List of SMILES or RDKit Mol object
+    """
+    if mp is None:
+        mp = utils.cpu_count()
+    
+    c = utils.picklable_const()
+    args = [[smi, n, return_mol, removeHs, c] for smi in smiles]
+
+    with confu.ProcessPoolExecutor(max_workers=mp) as executor:
+        results = executor.map(_make_cyclicpolymer_worker, args)
+        res = [r for r in results]
+
+    return res
+
+
+def _make_cyclicpolymer_worker(args):
+    smi, n, return_mol, removeHs, c = args
+    utils.restore_const(c)
+    res = make_cyclicpolymer(smi, n=n, return_mol=return_mol, removeHs=removeHs)
+    if return_mol:
+        utils.picklable()
+    return res
 
 
 def substruct_match_mol(pmol, smol, useChirality=False):
@@ -2846,24 +2891,29 @@ def substruct_match_smiles(poly_smiles, sub_smiles, useChirality=False):
     return pmol.HasSubstructMatch(smol, useChirality=useChirality)
 
 
-def substruct_match_smiles_list(smiles, smi_series, mp=None):
+def substruct_match_smiles_list(smiles, smi_series, mp=None, boolean=False):
     
-    if mp is None: mp = utils.cpu_count()
-    args = []
-    for index, smi in smi_series.iteritems():
-        args.append([smi, smiles])
+    if mp is None:
+        mp = utils.cpu_count()
+
+    c = utils.picklable_const()
+    args = [[smi, smiles, c] for smi in smi_series]
 
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_substruct_match_smiles_worker, args)
         res = [r for r in results]
     
-    smi_list = smi_series[res].index.values.tolist()
-
-    return smi_list
+    if boolean:
+        return res
+    else:
+        smi_list = smi_series[res].index.values.tolist()
+        return smi_list
 
 
 def _substruct_match_smiles_worker(args):
-    return substruct_match_smiles(args[0], args[1])
+    smi, smiles, c = args
+    utils.restore_const(c)
+    return substruct_match_smiles(smi, smiles)
 
 
 def full_match_mol(mol1, mol2, monomerize=True):
@@ -2915,7 +2965,8 @@ def full_match_smiles_list(smiles, smi_series, mp=None, monomerize=True):
     if mp is None:
         mp = utils.cpu_count()
 
-    args = [[smiles, smi, monomerize] for smi in smi_series]
+    c = utils.picklable_const()
+    args = [[smiles, smi, monomerize, c] for smi in smi_series]
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_full_match_smiles_worker, args)
         res = [r for r in results]
@@ -2926,7 +2977,9 @@ def full_match_smiles_list(smiles, smi_series, mp=None, monomerize=True):
 
 
 def _full_match_smiles_worker(args):
-    return full_match_smiles(args[0], args[1], monomerize=args[2])
+    smiles, smi, monomerize, c = args
+    utils.restore_const(c)
+    return full_match_smiles(smiles, smi, monomerize=monomerize)
 
 
 def full_match_smiles_listself(smi_series, mp=None, monomerize=True):
@@ -2935,7 +2988,8 @@ def full_match_smiles_listself(smi_series, mp=None, monomerize=True):
         mp = utils.cpu_count()
 
     idx_list = smi_series.index.tolist()
-    args = [[smi, monomerize] for smi in smi_series]
+    c = utils.picklable_const()
+    args = [[smi, monomerize, c] for smi in smi_series]
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_make_full_match_smiles, args)
         smi_list = [r for r in results]
@@ -2961,13 +3015,14 @@ def full_match_smiles_listlist(smi_series1, smi_series2, mp=None, monomerize=Tru
 
     idx_list1 = smi_series1.index.tolist()
     idx_list2 = smi_series2.index.tolist()
+    c = utils.picklable_const()
 
-    args = [[smi, monomerize] for smi in smi_series1]
+    args = [[smi, monomerize, c] for smi in smi_series1]
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_make_full_match_smiles, args)
         smi_list1 = [r for r in results]
 
-    args = [[smi, monomerize] for smi in smi_series2]
+    args = [[smi, monomerize, c] for smi in smi_series2]
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_make_full_match_smiles, args)
         smi_list2 = [r for r in results]
@@ -2985,7 +3040,9 @@ def full_match_smiles_listlist(smi_series1, smi_series2, mp=None, monomerize=Tru
 
 
 def _make_full_match_smiles(args):
-    smi, monomerize = args
+    smi, monomerize, c = args
+    utils.restore_const(c)
+
     if monomerize:
         smi = monomerization_smiles(smi)
     smi = make_cyclicpolymer(smi, n=3)
@@ -3002,11 +3059,11 @@ def _make_full_match_smiles(args):
 
 
 def ff_test_mp(smi_list, ff, mp=None):
-    if mp is None: mp = utils.cpu_count()
+    if mp is None:
+        mp = utils.cpu_count()
 
-    args = []
-    for smi in smi_list:
-        args.append([smi, ff])
+    c = utils.picklable_const()
+    args = [[smi, ff, c] for smi in smi_list]
 
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_ff_test_mp_worker, args)
@@ -3016,7 +3073,8 @@ def ff_test_mp(smi_list, ff, mp=None):
 
 
 def _ff_test_mp_worker(args):
-    smi, ff = args
+    smi, ff, c = args
+    utils.restore_const(c)
 
     try:
         mol = polymerize_MolFromSmiles(smi, n=2)
@@ -3322,7 +3380,8 @@ def polyinfo_classifier_list(smi_series, return_flag=False, mp=None):
     if mp is None:
         mp = utils.cpu_count()
 
-    args = [[smi, return_flag] for smi in smi_series]
+    c = utils.picklable_const()
+    args = [[smi, return_flag, c] for smi in smi_series]
     with confu.ProcessPoolExecutor(max_workers=mp) as executor:
         results = executor.map(_polyinfo_classifier_worker, args)
         res = [r for r in results]
@@ -3331,6 +3390,7 @@ def polyinfo_classifier_list(smi_series, return_flag=False, mp=None):
 
 
 def _polyinfo_classifier_worker(args):
-    smi, return_flag = args
+    smi, return_flag, c = args
+    utils.restore_const(c)
     return polyinfo_classifier(smi, return_flag=return_flag)
 

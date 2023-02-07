@@ -29,9 +29,9 @@ check_package = {}
 
 
 class LAMMPS():
-    def __init__(self, work_dir=None, solver_path=None, **kwargs):
+    def __init__(self, work_dir=None, solver_path=None, check_lammps_package=True, **kwargs):
         self.work_dir = work_dir if work_dir else './'
-        self.solver_path = solver_path if solver_path else os.getenv('LAMMPS_EXEC', 'lmp_mpi')
+        self.solver_path = solver_path if solver_path else const.lammps_exec
 
         self.idx = kwargs.get('idx', None)
         self.dat_file = kwargs.get('dat_file', 'radon_md_lmp.data' if self.idx is None else 'radon_md_lmp_%i.data' % self.idx)
@@ -46,7 +46,7 @@ class LAMMPS():
         }
 
         global check_package
-        if const.check_package_disable:
+        if const.check_package_disable or not check_lammps_package:
             for k in self.package.keys():
                 self.package[k] = True
         elif self.solver_path in check_package.keys():
@@ -460,6 +460,19 @@ class LAMMPS():
                     indata.append('# msd')
                     self.make_input_msd(md, wf, i, indata, unfix)
 
+                # Generate "variable"
+                if wf.variable:
+                    indata.append('')
+                    indata.append('# variable')
+                    self.make_input_variable(md, wf, i, indata, unfix)
+
+                # Generate "fix ave/time"
+                if wf.timeave:
+                    indata.append('')
+                    indata.append('# ave/time')
+                    self.make_input_timeave(md, wf, i, indata, unfix)
+
+
                 if len(wf.add) > 0:
                     indata.extend(wf.add)
 
@@ -471,21 +484,21 @@ class LAMMPS():
                 # Generate anisotropic pressure
                 if wf.ensemble in ['npt', 'nph']:
                     if wf.p_aniso:
-                        if not wf.px_start and not wf.py_start and not wf.pz_start:
+                        if wf.px_start is None and wf.py_start is None and wf.pz_start is None:
                             p_str = 'aniso %f %f %f ' % (wf.p_start, wf.p_stop, wf.p_dump)
                         else:
                             p_str = ''
-                            if wf.px_start:
+                            if wf.px_start is not None and wf.px_stop is not None and wf.px_dump is not None:
                                 p_str += 'x %f %f %f ' % (wf.px_start, wf.px_stop, wf.px_dump)
-                            if wf.px_start:
+                            if wf.py_start is not None and wf.py_stop is not None and wf.py_dump is not None:
                                 p_str += 'y %f %f %f ' % (wf.py_start, wf.py_stop, wf.py_dump)
-                            if wf.px_start:
+                            if wf.pz_start is not None and wf.pz_stop is not None and wf.pz_dump is not None:
                                 p_str += 'z %f %f %f ' % (wf.pz_start, wf.pz_stop, wf.pz_dump)
                         if wf.p_couple:
                             p_str += 'couple %s ' % (wf.p_couple)
                     else:
                         p_str = 'iso %f %f %f ' % (wf.p_start, wf.p_stop, wf.p_dump)
-                    p_str += 'nreset 1000 '
+                    p_str += 'nreset %i ' % wf.p_nreset
 
 
                 # Generate time integration, thermostat, and barostat
@@ -851,14 +864,25 @@ class LAMMPS():
         return indata, unfix
 
 
+    def make_input_variable(self, md, wf, i, indata, unfix):
+        for n, s, a in zip(wf.variable_name, wf.variable_style, wf.variable_args):
+            indata.append('variable %s %s %s' % (n, s, ' '.join(a)))
+
+        return indata, unfix
+
+
     def make_input_timeave(self, md, wf, i, indata, unfix, nounfix=False):
-        # Under development
-        #indata.append('fix ave%i all ave/time %i %i %i %s' % (i+1, Nevery, Nfreq, Nstep, var))
+        if wf.timeave_name is None:
+            wf.timeave_name = 'ave%i' % (i+1)
 
-        if not nounfix:
-            unfix.append('unfix ave%i' % (i+1))
+        if not nounfix and not wf.timeave_nounfix:
+            unfix.append('unfix %s' % wf.timeave_name)
 
-        md.thermo_style += ' f_ave%i' % (i+1)
+        var_str = ' '.join(wf.timeave_var)
+        indata.append('fix %s all ave/time %i %i %i %s' % (wf.timeave_name, wf.timeave_nevery, wf.timeave_nfreq, wf.timeave_nstep, var_str))
+
+        fix_name = ' '.join(['f_%s[%i]' % (wf.timeave_name, (j+1)) for j in range(len(wf.timeave_var))])
+        md.thermo_style += ' %s' % fix_name
         indata.append('thermo_style %s' % (md.thermo_style))
         indata.append('thermo_modify flush yes')
         indata.append('thermo %i' % (md.thermo_freq))
