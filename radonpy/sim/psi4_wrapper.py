@@ -19,7 +19,7 @@ from rdkit import Geometry as Geom
 import psi4
 import resp
 
-from ..core import const, utils
+from ..core import const, calc, utils
 
 __version__ = '0.2.3'
 
@@ -45,8 +45,9 @@ class Psi4w():
         self.mol = utils.deepcopy_mol(mol)
         self.confId = confId
         self.wfn = kwargs.get('wfn', None)
-        self.charge = kwargs.get('charge', 0)
-        self.multiplicity = kwargs.get('multiplicity', 1)
+        self.charge = kwargs.get('charge', Chem.rdmolops.GetFormalCharge(self.mol))
+        nr = calc.get_num_radicals(self.mol)
+        self.multiplicity = kwargs.get('multiplicity', 1 if nr == 0 else 2 if nr%2 == 1 else 3)
 
         self.method = kwargs.get('method', 'wb97m-d3bj')
         self.basis = kwargs.get('basis', '6-31G(d,p)')
@@ -334,7 +335,7 @@ class Psi4w():
             coord (ndarray(float), angstrom)
         """
         energies = np.array([])
-        coords = np.array([])
+        coords = []
 
         opt_dict = {
             'GEOM_MAXITER': geom_iter,
@@ -410,17 +411,21 @@ class Psi4w():
                 utils.radon_print('Error termination of psi4 optimization. %s' % e, level=3)
 
             energies = np.append(energies, energy)
-            coords = np.append(coords, coord)
+            coords.append(coord)
             if opt:
-                for i, atom in enumerate(self.mol.GetAtoms()):
+                conf = Chem.rdchem.Conformer(self.mol.GetNumAtoms())
+                conf.Set3D(True)
+                for i in range(self.mol.GetNumAtoms()):
                     self.mol.GetConformer(int(self.confId)).SetAtomPosition(i, Geom.Point3D(coord[i, 0], coord[i, 1], coord[i, 2]))
+                    conf.SetAtomPosition(i, Geom.Point3D(coord[i, 0], coord[i, 1], coord[i, 2]))
+                conf_id = self.mol.AddConformer(conf, assignId=True)
 
             self._fin_psi4()
 
         dt2 = datetime.datetime.now()
         utils.radon_print('Normal termination of psi4 scan. Elapsed time = %s' % str(dt2-dt1), level=1)
 
-        return energies*const.au2kj, coords # Hartree -> kJ/mol
+        return energies*const.au2kj, np.array(coords) # Hartree -> kJ/mol
 
 
     def force(self, wfn=True, **kwargs):
@@ -543,7 +548,7 @@ class Psi4w():
         return hessian.to_array()*const.au2kj/const.bohr2ang/const.bohr2ang # Hartree/bohr^2 -> kJ/(mol angstrom^2)
 
 
-    def tddft(self, n_state=6, triplet='NONE', tda=False, tdscf_maxiter=60, **kwargs):
+    def tddft(self, n_state=6, p_state=None, triplet='NONE', tda=False, tdscf_maxiter=60, **kwargs):
         """
         Psi4w.tddft
 
@@ -552,6 +557,8 @@ class Psi4w():
         Optional args:
             wfn: Store the wfn object of Psi4 (boolean)
             n_state: Number of states (int). If n_state < 0, all excitation states are calculated.
+            p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
+                     p_state is given priority over n_state.
             triplet: NONE, ALSO, or ONLY
             tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)
             tdscf_maxiter: Maximum number of TDSCF solver iterations (int)
@@ -577,7 +584,13 @@ class Psi4w():
         try:
             energy, self.wfn = psi4.energy(self.method, molecule=pmol, return_wfn=True, **kwargs)
             max_n_states = int((self.wfn.nmo() - self.wfn.nalpha()) * self.wfn.nalpha())
-            if n_state > max_n_states or n_state < 0:
+            if p_state is not None:
+                if 0.0 < p_state <= 1.0:
+                    n_state = int(max_n_states * p_state)
+                    utils.radon_print('n_state of Psi4 TD-DFT calculation set to %i.' % n_state, level=1)
+                else:
+                    utils.radon_print('p_state=%f of Psi4 TD-DFT calculation is out of range (0.0 < p_state <= 1.0).' % float(p_state), level=3)
+            elif n_state > max_n_states or n_state < 0:
                 utils.radon_print('n_state of Psi4 TD-DFT calculation set to %i.' % max_n_states, level=1)
                 n_state = max_n_states
             res = psi4.procrouting.response.scf_response.tdscf_excitations(self.wfn, states=n_state)
@@ -807,9 +820,10 @@ class Psi4w():
             cc2wfn_copy = self.cc2wfn
             self.cc2wfn = None
 
-            for i, e in enumerate([eps, -eps]):
-                for j, ax in enumerate(['x', 'y', 'z']):
-                    args.append([e, ax, self])
+            c = utils.picklable_const()
+            for e in [eps, -eps]:
+                for ax in ['x', 'y', 'z']:
+                    args.append([e, ax, self, c])
 
             # mpi4py
             if const.mpi4py_avail:
@@ -994,6 +1008,7 @@ class Psi4w():
         return alpha, tensor
 
 
+    # Experimental
     def cphf_hyperpolar(self, eps=1e-4, mp=0, **kwargs):
         """
         psi4w.polar
@@ -1054,9 +1069,10 @@ class Psi4w():
             cc2wfn_copy = self.cc2wfn
             self.cc2wfn = None
 
-            for i, e in enumerate([eps, -eps]):
-                for j, ax in enumerate(['x', 'y', 'z']):
-                    args.append([e, ax, self])
+            c = utils.picklable_const()
+            for e in [eps, -eps]:
+                for ax in ['x', 'y', 'z']:
+                    args.append([e, ax, self, c])
 
             # mpi4py
             if const.mpi4py_avail:
@@ -1395,8 +1411,9 @@ class Psi4w():
         
 
 def _polar_mp_worker(args):
-    eps, ax, psi4obj = args
-
+    eps, ax, psi4obj, c = args
+    utils.restore_const(c)
+    
     i = 0 if eps > 0 else 1
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan
     error_flag = False
@@ -1441,7 +1458,8 @@ def _polar_mp_worker(args):
 
 
 def _cphf_hyperpolar_mp_worker(args):
-    eps, ax, psi4obj = args
+    eps, ax, psi4obj, c = args
+    utils.restore_const(c)
 
     i = 0 if eps > 0 else 1
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan
