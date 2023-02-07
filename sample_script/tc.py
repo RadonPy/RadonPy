@@ -4,7 +4,7 @@
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.2.1'
+__version__ = '0.2.3'
 
 import matplotlib
 matplotlib.use('Agg')
@@ -22,6 +22,7 @@ import radonpy
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
 
 from radonpy.core import utils, calc
+from radonpy.sim import lammps
 from radonpy.sim.preset import eq, tc
 
 

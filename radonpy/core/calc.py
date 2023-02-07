@@ -23,7 +23,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 MD_avail = True
 try:
@@ -314,10 +314,18 @@ def molecular_weight(mol, ignore_linker=True):
     return mol_weight
 
 
+def get_num_radicals(mol):
+    nr = 0
+    for atom in mol.GetAtoms():
+        nr += atom.GetNumRadicalElectrons()
+    return nr
+
+
 def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
-    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, **kwargs):
+    charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'},
+    total_charge=None, total_multiplicity=None, **kwargs):
     """
     calc.assign_charges
 
@@ -357,6 +365,11 @@ def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, t
         if not psi4_avail:
             utils.radon_print('Cannot import psi4_wrapper. You can use psi4_wrapper by "conda install -c psi4 psi4 resp dftd3"', level=3)
             return False
+
+        if type(total_charge) is int:
+            kwargs['charge'] = total_charge
+        if type(total_multiplicity) is int:
+            kwargs['multiplicity'] = total_multiplicity
 
         psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
                         name=log_name, **kwargs)
@@ -647,7 +660,7 @@ def vdw_volume(mol, confId=0, method='grid', radii='rdkit', gridSpacing=0.2):
         return np.sum(V_vdw)
     
     else:
-        radon_print('Illegal input of method = %s' % method, level=3)
+        utils.radon_print('Illegal input of method = %s' % method, level=3)
         return np.nan
 
 
@@ -717,7 +730,7 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
     """
 
     if not hasattr(mol, 'cell'):
-        radon_print('The cell attribute of the input Mol object is undefined', level=2)
+        utils.radon_print('The cell attribute of the input Mol object is undefined', level=2)
         return np.nan
 
     #coord = wrap_mol(mol, confId=confId)
@@ -737,7 +750,8 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
 def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmsthresh=0.5, tfdthresh=0.02, clustering='TFD',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', log_name='mol', solver='lammps', solver_path=None, work_dir=None, tmp_dir=None,
-        etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000, **kwargs):
+        etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000,
+        total_charge=None, total_multiplicity=None, **kwargs):
     """
     calc.conformation_search
 
@@ -819,10 +833,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
 
         if (mm_mp > 0 or const.mpi4py_avail) and nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(nconf):
-                args.append((mol_c, i, solver, solver_path, tmp_dir, omp, mpi, gpu))
+            c = utils.picklable_const()
+            args = [(mol_c, i, solver, solver_path, tmp_dir, omp, mpi, gpu, c) for i in range(nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -862,10 +874,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
         # Parallel execution of RDKit optimizations
         if (mm_mp > 0 or const.mpi4py_avail) and nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(nconf):
-                args.append((mol_c, prop, i))
+            c = utils.picklable_const()
+            args = [(mol_c, prop, i, c) for i in range(nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -966,19 +976,23 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
             Chem.SanitizeMol(mol_c)
             return mol_c, re_energy
 
+        if type(total_charge) is int:
+            kwargs['charge'] = total_charge
+        if type(total_multiplicity) is int:
+            kwargs['multiplicity'] = total_multiplicity
+
         if dft_nconf > nconf_new: dft_nconf = nconf_new
-        psi4mol = Psi4w(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen, memory=memory, **kwargs)
+        psi4mol = Psi4w(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                        memory=memory, **kwargs)
 
         utils.radon_print('Start optimization of %i conformers by DFT level.' % dft_nconf, level=1)
 
         # Parallel execution of psi4 optimizations
         if (psi4_mp > 0 or const.mpi4py_avail) and dft_nconf > 1:
             utils.picklable(mol_c)
-            args = []
-
-            for i in range(dft_nconf):
-                args.append((mol_c, i, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name,
-                            geom_iter, geom_conv, geom_algorithm, memory, kwargs))
+            c = utils.picklable_const()
+            args = [(mol_c, i, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name,
+                    geom_iter, geom_conv, geom_algorithm, memory, kwargs, c) for i in range(dft_nconf)]
 
             # mpi4py
             if const.mpi4py_avail:
@@ -1054,7 +1068,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
 
 
 def _conf_search_lammps_worker(args):
-    mol, confId, solver, solver_path, work_dir, omp, mpi, gpu = args
+    mol, confId, solver, solver_path, work_dir, omp, mpi, gpu, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
 
@@ -1068,7 +1083,8 @@ def _conf_search_lammps_worker(args):
 
 
 def _conf_search_rdkit_worker(args):
-    mol, prop, confId = args
+    mol, prop, confId, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
     
@@ -1084,13 +1100,15 @@ def _conf_search_rdkit_worker(args):
 
 
 def _conf_search_psi4_worker(args):
-    mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs = args
+    mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs, c = args
+    utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
 
     error_flag = False
     utils.restore_picklable(mol)
-    psi4mol = Psi4w(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen, memory=memory, **kwargs)
+    psi4mol = Psi4w(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                    memory=memory, **kwargs)
     psi4mol.confId = confId
     psi4mol.name = '%s_conf_search_%i' % (log_name, confId)
     utils.radon_print('DFT optimization of conformer %i' % psi4mol.confId)
@@ -1113,7 +1131,7 @@ def refractive_index(polarizability, density, mol_weight, ratio=None):
     Args:
         polarizability: list of polarizability of repeating units (float, angstrom^3)
         density: (float, g/cm^3)
-        mol_weight: list of molecular weight of repeating units (float, angstrom^3)
+        mol_weight: list of molecular weight of repeating units (float, g mol^-1)
         ratio: ratio of repeating units in a copolymer
 
     Return:
@@ -1136,7 +1154,7 @@ def refractive_index(polarizability, density, mol_weight, ratio=None):
         ratio = np.array(ratio / np.sum(ratio))
 
     alpha = polarizability * const.ang2cm**3    # angstrom^3 -> cm^3
-    phi = np.sum( ( (4*np.pi/3) * (alpha*density*const.NA)/mol_weight ) * ratio )   # (cm^3) * (g cm^-3) * (mol^-1) / (g mol^-1)
+    phi = (4*np.pi*density*const.NA/3) * np.sum(alpha*ratio)/np.sum(mol_weight*ratio)   # (g cm^-3) * (mol^-1) * (cm^3) / (g mol^-1)
     ri = np.sqrt((1+2*phi)/(1-phi))
 
     return ri

@@ -6,22 +6,25 @@
 # ff.descriptor module
 # ******************************************************************************
 
-import os
 import numpy as np
 from scipy.stats import skew, kurtosis
 import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
-from ..core import poly, utils
+from ..core import poly, utils, const
 
-__version__ = '0.2.1'
+
+__version__ = '0.2.3'
 
 
 class FF_descriptor():
-    def __init__(self, ff, charge_max=1.0, charge_min=-1.0, polar=False, polar_max=2.0):
+    def __init__(self, ff, charge_max=1.0, charge_min=-1.0, polar=False, polar_max=2.0, deuterium=False,
+                stats=['mean', 'std', 'skew', 'kurtosis', 'max', 'min'], **kwargs):
         ignore_pt = ['hw', 'n4', 'nx', 'ny', 'nz', 'n+']
         self.ff = ff
         self.polar = polar
+        self.deuterium = deuterium
+        self.stats = stats
 
         # Get FF parameter list
         self.ff_mass = [1.008, 12.011, 14.007, 15.999, 18.998, 30.974, 32.067, 35.453, 79.904, 126.904] # H,C,N,O,F,P,S,Cl,Br,I
@@ -66,6 +69,40 @@ class FF_descriptor():
         self.theta0_scale  = self.min_max_scale(self.ff_theta0)
         self.k_dih_scale   = self.min_max_scale(self.ff_k_dih)
         #self.phi0_scale    = self.min_max_scale(self.ff_phi0)
+
+        self.nk = kwargs.get('nk', 20)
+        self.s = kwargs.get('s', None)
+        self.s_mass = kwargs.get('s_mass', 0.05)
+        self.mu = kwargs.get('mu', None)
+        self.mu_mass = kwargs.get('mu_mass', None)
+        
+        # Setting sigma
+        if self.s is None:
+            if self.polar:
+                self.s = np.array([1/self.nk/2]*9)
+            else:
+                self.s = np.array([1/self.nk/2]*8)
+        elif type(self.s) is float:
+            if self.polar:
+                self.s = np.array([self.s]*9)
+            else:
+                self.s = np.array([self.s]*8)
+
+        # Setting mu_mass
+        if self.mu_mass is None:
+            if self.deuterium:
+                self.mu_mass = self.mass_scale.scale(self.ff_mass_D)
+            else:
+                self.mu_mass = self.mass_scale.scale(self.ff_mass)
+
+        # Setting mu
+        if self.mu is None:
+            if self.polar:
+                self.mu = np.zeros((9, self.nk))
+            else:
+                self.mu = np.zeros((8, self.nk))
+            self.mu[:][:] = np.linspace(0.0, 1.0, self.nk*2+1)[1:-1:2]
+
 
 
     def get_param_list(self, mol, ignoreH=False):
@@ -119,16 +156,14 @@ class FF_descriptor():
 
     def get_param_mp(self, smiles, mp=None, cyclic=10, ignoreH=False):
 
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [cyclic, self]
-        for smi in smiles:
-            args.append([smi, *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(get_param_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, cyclic, self, c] for smi in smiles]
+
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(get_param_mp_wrapper, args)
 
         # NaN padding for ff parameter dataset
         vp = max(list(map(len, [x[0] for x in results[:]])))
@@ -207,17 +242,36 @@ class FF_descriptor():
 
         # Calculate summary statistics
         desc = []
-        desc.extend([np.mean(mass*w_atom), np.std(mass*w_atom, ddof=1), skew(mass*w_atom), kurtosis(mass*w_atom), np.max(mass), np.min(mass)])
-        desc.extend([np.mean(charge*w_atom), np.std(charge*w_atom, ddof=1), skew(charge*w_atom), kurtosis(charge*w_atom), np.max(charge), np.min(charge)])
-        desc.extend([np.mean(epsilon*w_atom), np.std(epsilon*w_atom, ddof=1), skew(epsilon*w_atom), kurtosis(epsilon*w_atom), np.max(epsilon), np.min(epsilon)])
-        desc.extend([np.mean(sigma*w_atom), np.std(sigma*w_atom, ddof=1), skew(sigma*w_atom), kurtosis(sigma*w_atom), np.max(sigma), np.min(sigma)])
-        desc.extend([np.mean(k_bond*w_bond), np.std(k_bond*w_bond, ddof=1), skew(k_bond*w_bond), kurtosis(k_bond*w_bond), np.max(k_bond), np.min(k_bond)])
-        desc.extend([np.mean(r0*w_bond), np.std(r0*w_bond, ddof=1), skew(r0*w_bond), kurtosis(r0*w_bond), np.max(r0), np.min(r0)])
         if self.polar:
-            desc.extend([np.mean(polar*w_bond), np.std(polar*w_bond, ddof=1), skew(polar*w_bond), kurtosis(polar*w_bond), np.max(polar), np.min(polar)])
-        desc.extend([np.mean(k_ang*w_angle), np.std(k_ang*w_angle, ddof=1), skew(k_ang*w_angle), kurtosis(k_ang*w_angle), np.max(k_ang), np.min(k_ang)])
-        desc.extend([np.mean(theta0*w_angle), np.std(theta0*w_angle, ddof=1), skew(theta0*w_angle), kurtosis(theta0*w_angle), np.max(theta0), np.min(theta0)])
-        desc.extend([np.mean(k_dih*w_dih), np.std(k_dih*w_dih, ddof=1), skew(k_dih*w_dih), kurtosis(k_dih*w_dih), np.max(k_dih), np.min(k_dih)])
+            feature = [mass, charge, epsilon, sigma, k_bond, r0, polar, k_ang, theta0, k_dih]
+            weights = [w_atom, w_atom, w_atom, w_atom, w_bond, w_bond, w_bond, w_angle, w_angle, w_dih]
+        else:
+            feature = [mass, charge, epsilon, sigma, k_bond, r0, k_ang, theta0, k_dih]
+            weights = [w_atom, w_atom, w_atom, w_atom, w_bond, w_bond, w_angle, w_angle, w_dih]
+
+        for f, w in zip(feature, weights):
+            ave = np.average(f, weights=w)
+            var = np.average((f-ave)**2, weights=w)*(len(f)/(len(f)-1))
+            for s in self.stats:
+                if s == 'mean':
+                    desc.append(ave)
+                elif s == 'var':
+                    desc.append(var)
+                elif s == 'std' or s == 'sd':
+                    desc.append(np.sqrt(var))
+                elif s == 'skew' or s == 'skewness':
+                    desc.append(skew(f))
+                    #desc.append(np.average(((f-ave)/np.sqrt(var))**3, weights=w))
+                elif s == 'kurt' or s == 'kurtosis':
+                    desc.append(kurtosis(f))
+                    #desc.append(np.average(((f-ave)/np.sqrt(var))**4, weights=w))
+                elif s.find('moment_') == 0:
+                    k = int(s.split('_')[1])
+                    desc.append(np.average(((f-ave)/np.sqrt(var))**k, weights=w))
+                elif s == 'max':
+                    desc.append(np.max(f))
+                elif s == 'min':
+                    desc.append(np.min(f))
 
         return np.array(desc)
 
@@ -226,16 +280,14 @@ class FF_descriptor():
 
         if ratio is None:
             ratio = np.array([None]*len(smiles))
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [cyclic, ignoreH, self]
-        for i, smi in enumerate(smiles):
-            args.append([smi, ratio[i], *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(ffss_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, ratio[i], cyclic, ignoreH, self, c] for i, smi in enumerate(smiles)]
+
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(ffss_mp_wrapper, args)
 
         return results
 
@@ -247,40 +299,49 @@ class FF_descriptor():
         else:
             param_list = ['mass', 'charge', 'epsilon', 'sigma', 'k_bond', 'r0', 'k_angle', 'theta0', 'k_dih']
 
-        stat_list = ['mean', 'sd', 'skew', 'kurtosis', 'max', 'min']
         for param in param_list:
-            for st in stat_list:
+            for st in self.stats:
                 desc_names.append('%s_%s' % (param, st))
 
         return desc_names
 
 
-    def ff_kernel_mean(self, mols, ratio=None, nk=20, kernel=None, s=None, s_mass=0.05, mu=None, mu_mass=None, ignoreH=False, deuterium=False):
+    def ff_kernel_mean(self, mols, ratio=None, nk=None, kernel=None, s=None, s_mass=None, mu=None, mu_mass=None, ignoreH=False):
 
         if kernel is None:
             kernel = self.Gaussian
 
+        if nk is None:
+            nk = self.nk
+
         # Setting sigma
         if s is None:
-            if self.polar: s = np.array([1/nk/2]*9)
-            else: s = np.array([1/nk/2]*8)
+            pass
         elif type(s) is float:
-            if self.polar: s = np.array([s]*9)
-            else: s = np.array([s]*8)
+            if self.polar:
+                self.s = np.array([s]*9)
+            else:
+                self.s = np.array([s]*8)
+        elif type(s) is list:
+            self.s = np.array(s)
+        s = self.s
+
+        # Setting sigma of mass
+        s_mass = self.s_mass
 
         # Setting mu
-        if mu_mass is None and deuterium:
-            center_mass = self.mass_scale.scale(self.ff_mass_D)
-        elif mu_mass is None and not deuterium:
-            center_mass = self.mass_scale.scale(self.ff_mass)
-        else:
-            center_mass = mu_mass
         if mu is None:
-            if self.polar: center = np.zeros((9, nk))
-            else: center = np.zeros((8, nk))
-            center[:][:] = np.linspace(0.0, 1.0, nk*2+1)[1:-1:2]
+            pass
         else:
-            center = mu
+            self.mu = mu
+        center = self.mu
+
+        # Setting mu of mass
+        if mu_mass is None:
+            pass
+        else:
+            self.mu_mass = mu_mass
+        center_mass = self.mu_mass
 
         if type(mols) is Chem.Mol:
             mols = [mols]
@@ -365,27 +426,28 @@ class FF_descriptor():
         return desc
 
 
-    def ffkm_mp(self, smiles, ratio=None, mp=None, nk=20, kernel=None,
-                s=None, s_mass=0.05, cyclic=10, mu=None, mu_mass=None, ignoreH=False, deuterium=False):
+    def ffkm_mp(self, smiles, ratio=None, mp=None, nk=None, kernel=None,
+                s=None, s_mass=None, cyclic=10, mu=None, mu_mass=None, ignoreH=False):
 
         if ratio is None:
             ratio = np.array([None]*len(smiles))
-        if mp is None: mp = utils.cpu_count()
-        args = []
-        tmp = [nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, self]
-        for i, smi in enumerate(smiles):
-            args.append([smi, ratio[i], *tmp])
+        if mp is None:
+            mp = utils.cpu_count()
 
-        p = MP.Pool(mp)
-        results = p.map(ffkm_mp_wrapper, args)
-        p.close()
-        p.terminate()
+        c = utils.picklable_const()
+        args = [[smi, ratio[i], nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, self, c] for i, smi in enumerate(smiles)]
+    
+        with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+            results = executor.map(ffkm_mp_wrapper, args)
 
         return results
 
 
-    def ffkm_desc_names(self, nk=20, deuterium=False):
-        if deuterium:
+    def ffkm_desc_names(self, nk=None):
+        if nk is None:
+            nk = self.nk
+
+        if self.deuterium:
             desc_names = ['mass_H', 'mass_D', 'mass_C', 'mass_N', 'mass_O', 'mass_F', 'mass_P', 'mass_S', 'mass_Cl', 'mass_Br', 'mass_I']
         else:
             desc_names = ['mass_H', 'mass_C', 'mass_N', 'mass_O', 'mass_F', 'mass_P', 'mass_S', 'mass_Cl', 'mass_Br', 'mass_I']
@@ -453,7 +515,8 @@ def ffss_mp_wrapper(args):
     flag = True
     mols = []
 
-    smi, ratio, cyclic, ignoreH, descobj = args
+    smi, ratio, cyclic, ignoreH, descobj, c = args
+    utils.restore_const(c)
 
     if type(smi) is not list:
         smi = [smi]
@@ -477,7 +540,7 @@ def ffss_mp_wrapper(args):
             desc = np.full(len(descobj.ffss_desc_names()), np.nan)
     except:
         utils.radon_print('Fail to calculate descriptor. %s' % (','.join(smi)), level=2)
-        desc = np.full(len(descobj.ffkm_desc_names(nk=nk)), np.nan)
+        desc = np.full(len(descobj.ffss_desc_names()), np.nan)
 
     return desc
 
@@ -486,7 +549,8 @@ def ffkm_mp_wrapper(args):
     flag = True
     mols = []
 
-    smi, ratio, nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, deuterium, descobj = args
+    smi, ratio, nk, kernel, s, s_mass, mu, mu_mass, cyclic, ignoreH, descobj, c = args
+    utils.restore_const(c)
 
     if type(smi) is not list:
         smi = [smi]
@@ -505,7 +569,7 @@ def ffkm_mp_wrapper(args):
 
         if flag:
             desc = descobj.ff_kernel_mean(mols, ratio=ratio, nk=nk, kernel=kernel,
-                                          s=s, s_mass=s_mass, mu=mu, mu_mass=mu_mass, ignoreH=ignoreH, deuterium=deuterium)
+                                          s=s, s_mass=s_mass, mu=mu, mu_mass=mu_mass, ignoreH=ignoreH)
         else:
             utils.radon_print('Fail to assign force field. %s' % (','.join(smi)), level=2)
             desc = np.full(len(descobj.ffkm_desc_names(nk=nk)), np.nan)
@@ -518,7 +582,8 @@ def ffkm_mp_wrapper(args):
 
 
 def get_param_mp_wrapper(args):
-    smi, cyclic, descobj = args
+    smi, cyclic, descobj, c = args
+    utils.restore_const(c)
 
     try:
         if cyclic:

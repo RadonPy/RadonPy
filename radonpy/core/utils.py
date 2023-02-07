@@ -7,17 +7,16 @@
 # ******************************************************************************
 
 import os
-import sys
 import psutil
 from copy import deepcopy
+from itertools import permutations
 import numpy as np
 import pickle
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit import Geometry as Geom
 from . import const
 
-__version__ = '0.2.2'
+__version__ = '0.2.3'
 
 
 class Angle():
@@ -547,16 +546,21 @@ def MolToPDBBlock(mol, confId=0):
     conect = []
     serial = 0
     ter = 0
-    chainid_pre = ''
+    chainid_pre = 1
+    chainid_pdb_pre = ''
 
     for i, atom in enumerate(mol.GetAtoms()):
         serial += 1
         resinfo = atom.GetPDBResidueInfo()
         if resinfo is None: return None
 
-        chainid = resinfo.GetChainId()
-        if chainid != chainid_pre and chainid_pre:
-            PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, chainid_pre, resnum, icode))
+        chainid_pdb = resinfo.GetChainId()
+        chainid = atom.GetIntProp('mol_id')
+        if chainid != chainid_pre:
+            if chainid_pdb_pre:
+                PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, chainid_pdb_pre, resnum, icode))
+            else:
+                PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, '*', resnum, icode))
             ter += 1
             serial += 1
 
@@ -572,11 +576,17 @@ def MolToPDBBlock(mol, confId=0):
         occ = resinfo.GetOccupancy() if resinfo.GetOccupancy() else 1.0
         tempf = resinfo.GetTempFactor() if resinfo.GetTempFactor() else 0.0
 
-        line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
-                record, serial, name, altLoc, resname, chainid, resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+        if chainid_pdb:
+            line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
+                    record, serial, name, altLoc, resname, chainid_pdb, resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+        else:
+            line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
+                    record, serial, name, altLoc, resname, '*', resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+
         PDBBlock.append(line)
 
         chainid_pre = chainid
+        chainid_pdb_pre = chainid_pdb
 
         if len(atom.GetNeighbors()) > 0:
             flag = False
@@ -951,3 +961,16 @@ def is_in_ring(ab, max_size=10):
             return True
     return False
 
+
+def picklable_const():
+    c = {}
+    for v in dir(const):
+        if v.count('__') != 2 and v != 'os':
+            c[v] = getattr(const, v)
+    return c
+
+
+def restore_const(c):
+    for k, v in c.items():
+        setattr(const, k, v)
+    return True
