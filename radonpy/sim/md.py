@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .lammps import LAMMPS, Analyze
 from ..core import calc, utils
 
-__version__ = '0.2.3'
+__version__ = '0.2.4'
 
 
 class MD():
@@ -162,6 +162,8 @@ class Dynamics():
         self.rg = kwargs.get('rg', False)
         self.msd = kwargs.get('msd', False)
         self.momentum = kwargs.get('momentum', False)
+        self.variable = kwargs.get('variable', False)
+        self.timeave = kwargs.get('timeave', False)
 
         self.add = kwargs.get('add', [])
         self.add_f = kwargs.get('add_f', [])
