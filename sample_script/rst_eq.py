@@ -19,6 +19,7 @@ import radonpy
 # For Fugaku
 #from radonpy.core import const
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
+#const.check_package_disable = True
 
 from radonpy.core import utils, calc
 from radonpy.sim import lammps
@@ -41,8 +42,10 @@ if __name__ == '__main__':
     mpi = int(os.environ.get('RadonPy_MPI', utils.cpu_count()))
     gpu = int(os.environ.get('RadonPy_GPU', 0))
     retry_eq = int(os.environ.get('RadonPy_RetryEQ', 3))
+    retry_eq = 2 if retry_eq == 0 else retry_eq
     rst_pickle_file = os.environ.get('RadonPy_Pickle_File', None)
     rst_data_file = os.environ.get('RadonPy_LAMMPS_Data_File', None)
+    skip_init_analy = bool(int(os.environ.get('RadonPy_Skip_Init_Analy', 0)))
 
 
     work_dir = './%s' % data['DBID']
@@ -73,12 +76,15 @@ if __name__ == '__main__':
             mol = lammps.MolFromLAMMPSdata(rst_data_file)
 
     # Analyze the results of equilibrium MD
-    last_idx = eq.get_final_idx(work_dir)
-    eqmd = eq.Additional(mol, work_dir=work_dir, idx=last_idx)
-    analy = eqmd.analyze()
-    analy.pdb_file = os.path.join(work_dir, 'eq1.pdb')
-    prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
-    result = analy.check_eq()
+    if skip_init_analy:
+        result = False
+    else:
+        last_idx = eq.get_final_idx(work_dir)
+        eqmd = eq.Additional(mol, work_dir=work_dir, idx=last_idx)
+        analy = eqmd.analyze()
+        analy.pdb_file = os.path.join(work_dir, 'eq1.pdb')
+        prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
+        result = analy.check_eq()
 
     # Additional equilibration MD
     for i in range(retry_eq):
