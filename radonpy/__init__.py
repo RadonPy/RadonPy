@@ -7,7 +7,7 @@
 # ******************************************************************************
 
 __copyright__    = 'Copyright (C) 2023. RadonPy developers.'
-__version__      = '0.2.4'
+__version__      = '0.2.5'
 __license__      = 'BSD-3-Clause'
 __author__       = 'Yoshihiro Hayashi'
 __author_email__ = 'yhayashi@ism.ac.jp'
