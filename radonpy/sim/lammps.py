@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.3'
+__version__ = '0.2.5'
 
 mdtraj_avail = True
 try:
@@ -353,7 +353,10 @@ class LAMMPS():
         """
 
         indata = []
-        indata.append('log %s append' % (md.log_file))
+        if md.log_append:
+            indata.append('log %s append' % (md.log_file))
+        else:
+            indata.append('log %s' % (md.log_file))
         indata.append('units %s' % (md.units))
         indata.append('atom_style %s' % (md.atom_style))
         if md.pbc:
