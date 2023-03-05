@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .lammps import LAMMPS, Analyze
 from ..core import calc, utils
 
-__version__ = '0.2.4'
+__version__ = '0.2.5'
 
 
 class MD():
@@ -57,6 +57,7 @@ class MD():
         self.time_step = kwargs.get('time_step', 1.0)
         self.drude = kwargs.get('drude', False)
         self.set_init_velocity = kwargs.get('set_init_velocity', None)
+        self.log_append = kwargs.get('log_append', True)
         self.wf = []
         self.add = []
         self.add_f = []
