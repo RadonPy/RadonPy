@@ -20,6 +20,7 @@ import radonpy
 # For Fugaku
 #from radonpy.core import const
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
+#const.check_package_disable = True
 
 from radonpy.core import utils, calc
 from radonpy.sim import lammps
