@@ -108,6 +108,9 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
+## Related project
+- [SMiPoly](https://github.com/PEJpOhno/SMiPoly)
+
 ## Copyright and licence
 ©Copyright 2022 The RadonPy developers, all rights reserved.
 Released under the `BSD-3 license`.
