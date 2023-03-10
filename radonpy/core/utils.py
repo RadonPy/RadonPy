@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -7,7 +7,6 @@
 # ******************************************************************************
 
 import os
-import sys
 import re
 import psutil
 from copy import deepcopy
@@ -15,10 +14,9 @@ import numpy as np
 import pickle
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit import Geometry as Geom
 from . import const
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 
 class Angle():
@@ -578,7 +576,7 @@ def MolToPDBBlock(mol, confId=0):
             if chainid_pdb_pre:
                 PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, chainid_pdb_pre, resnum, icode))
             else:
-                PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, '', resnum, icode))
+                PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial, resname, '*', resnum, icode))
             ter += 1
             serial += 1
 
@@ -594,8 +592,13 @@ def MolToPDBBlock(mol, confId=0):
         occ = resinfo.GetOccupancy() if resinfo.GetOccupancy() else 1.0
         tempf = resinfo.GetTempFactor() if resinfo.GetTempFactor() else 0.0
 
-        line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
-                record, serial, name, altLoc, resname, chainid_pdb, resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+        if chainid_pdb:
+            line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
+                    record, serial, name, altLoc, resname, chainid_pdb, resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+        else:
+            line = '%-6s%5i %4s%1s%3s %1s%4i%1s   %8.3f%8.3f%8.3f%6.2f%6.2f          %2s' % (
+                    record, serial, name, altLoc, resname, '*', resnum, icode, x, y, z, occ, tempf, atom.GetSymbol())
+
         PDBBlock.append(line)
 
         chainid_pre = chainid
@@ -611,7 +614,7 @@ def MolToPDBBlock(mol, confId=0):
             if flag:
                 conect.append(conect_line)
 
-    PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial+1, resname, chainid_pdb, resnum, icode))
+    PDBBlock.append('TER   %5i      %3s %1s%4i%1s' % (serial+1, resname, chainid_pre, resnum, icode))
     PDBBlock.extend(conect)
     PDBBlock.append('END')
 

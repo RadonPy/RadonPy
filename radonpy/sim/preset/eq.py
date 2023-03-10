@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -11,12 +11,11 @@ import glob
 import re
 import datetime
 import numpy as np
-from rdkit import Geometry as Geom
 from ...core import calc, const, utils
 from .. import lammps, preset
 from ..md import MD
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b2'
 
 
 class Equilibration(preset.Preset):

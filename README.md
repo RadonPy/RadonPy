@@ -59,6 +59,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 		- Alternating copolymer
 		- Random copolymer
 		- Block copolymer
+		- Blanched polymers
 	- Generation of a simulation cell
 		- Amorphous
 		- Polymer mixture
@@ -82,6 +83,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 		- Isentropic bulk modulus
 		- Static dielectric constant
 		- Refractive index
+		- Abbe's number
 		- Radius of gyration
 		- End-to-end distance
 		- Nematic order parameter
@@ -90,7 +92,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 	- Equilibration MD
 	- Calculation of thermal conductivity with NEMD
 - Easy installation
-    - Only using open-source software
+    	- Only using open-source software
 - Tools for polymer informatics
 	- Force field descriptor
 	- Generator of macrocyclic oligomer for descriptor construction of polymers
@@ -108,8 +110,11 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
+## Related project
+- [SMiPoly](https://github.com/PEJpOhno/SMiPoly)
+
 ## Copyright and licence
-©Copyright 2022 The RadonPy developers, all rights reserved.
+©Copyright 2023 The RadonPy developers, all rights reserved.
 Released under the `BSD-3 license`.
 
 

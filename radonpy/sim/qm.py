@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -15,7 +15,7 @@ from rdkit import Geometry as Geom
 from ..core import utils, const, calc
 from .psi4_wrapper import Psi4w
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 
 def assign_charges(mol, charge='RESP', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
@@ -297,7 +297,6 @@ def refractive_index(mols, density, ratio=None, confId=0, opt=True, work_dir=Non
     return ri_data
 
 
-# Experimental
 def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='abbe_number_cc2',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'}, 
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
@@ -348,7 +347,7 @@ def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=Non
     if opt:
         psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
         if psi4mol.error_flag:
-            utils.radon_print('Psi4 optimization error in sim.qm.abbe_number.', level=2)
+            utils.radon_print('Psi4 optimization error in sim.qm.abbe_number_cc2.', level=2)
             return abbe_data
 
         coord = psi4mol.mol.GetConformer(confId).GetPositions()
@@ -365,13 +364,13 @@ def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=Non
     n_486 = calc.refractive_index(alpha[2], density, mol_weight)
 
     abbe_data = {
-        'abbe_number': (n_589 - 1)/(n_486 - n_656),
-        'refractive_index_656': n_656,
-        'refractive_index_589': n_589,
-        'refractive_index_486': n_486,
-        'qm_polarizability_656': alpha[0],
-        'qm_polarizability_589': alpha[1],
-        'qm_polarizability_486': alpha[2],
+        'abbe_number_cc2': (n_589 - 1)/(n_486 - n_656),
+        'refractive_index_cc2_656': n_656,
+        'refractive_index_cc2_589': n_589,
+        'refractive_index_cc2_486': n_486,
+        'qm_polarizability_cc2_656': alpha[0],
+        'qm_polarizability_cc2_589': alpha[1],
+        'qm_polarizability_cc2_486': alpha[2],
     }
 
     del psi4mol
@@ -380,19 +379,18 @@ def abbe_number_cc2(mol, density, confId=0, opt=True, work_dir=None, tmp_dir=Non
     return abbe_data
 
 
-# Experimental
-def polar_sos(res, omega=None):
+def polar_sos(res, wavelength=None):
     """
     sim.qm.polar_sos
 
-    Calculation of static and dynamic dipole polarizability by sum-over-states approach using TD-DFT results
+    Calculation of static/dynamic electric dipole polarizability by sum-over-states approach using TD-DFT results
     J. Phys. Chem. A 2004, 108, 11063-11072
 
     Args:
         res: Results of TD-DFT calculation
     
     Optional args:
-        omega: wavelength [nm]. If None, static dipole polarizability is computed.
+        wavelength: wavelength [nm]. If None, static dipole polarizability is computed. (float)
 
     return
         Polarizability (float, angstrom^3)
@@ -404,10 +402,10 @@ def polar_sos(res, omega=None):
     E = np.array([r['EXCITATION ENERGY'] for r in res])
     mu = np.array([r['ELECTRIC DIPOLE TRANSITION MOMENT (LEN)'] for r in res])
     
-    if omega is None:
+    if wavelength is None:
         tensor = 2*np.sum( (mu[:, np.newaxis, :] * mu[:, :, np.newaxis]) / E.reshape((-1,1,1)), axis=0 ) * pv
     else:
-        Ep = const.h*const.c/(omega*1e-9) / 4.3597447222071e-18    # (J s) * (m/s) / (nm->m) = J -> hartree
+        Ep = const.h*const.c/(wavelength*1e-9) / 4.3597447222071e-18    # (J s) * (m/s) / (nm->m) = J -> hartree
         tensor = 2*np.sum( (mu[:, np.newaxis, :] * mu[:, :, np.newaxis]) / (E - (Ep**2)/E).reshape((-1,1,1)), axis=0 ) * pv
         
     alpha = np.mean(np.diag(tensor))
@@ -415,23 +413,22 @@ def polar_sos(res, omega=None):
     return alpha, tensor
 
 
-# Experimental
-def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='polarizability_sos',
+def polarizability_sos(mol, wavelength=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='polarizability_sos',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='polarizability_sos_tddft.json',
+        n_state=1000, p_state=None, tda=False, tdscf_maxiter=60, td_output='polarizability_sos_tddft.json',
         total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.polarizability_sos
 
-    Calculation of dynemic dipole polarizability by using TD-DFT calculation
+    Calculation of static/dynemic electric dipole polarizability by using TD-DFT calculation
 
     Args:
         mol: RDKit Mol object
     
     Optional args:
-        omega: wavelength [nm]. If None, static dipole polarizability is computed.
+        wavelength: wavelength [nm]. If None, static dipole polarizability is computed.
         confID: Target conformer ID (int)
         opt: Do optimization (boolean)
         work_dir: Work directory path (str)
@@ -440,10 +437,12 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
         opt_method: Using method in the optimize calculation (str, default:wb97m-d3bj)
         opt_basis: Using basis set in the optimize calculation (str, default:6-31G(d,p))
         opt_basis_gen: Using basis set in the optimize calculation for each element
-        td_method: Using method in the polarizability calculation (str, default:wb97m-d3bj)
-        td_basis: Using basis set in the polarizability calculation (str, default:6-311+G(2d,p))
-        td_basis_gen: Using basis set in the polarizability calculation for each element
+        td_method: Using method in the TD-DFT calculation (str, default:wb97m-d3bj)
+        td_basis: Using basis set in the TD-DFT calculation (str, default:6-311+G(2d,p))
+        td_basis_gen: Using basis set in the TD-DFT calculation for each element
         n_state: Number of state in TD-DFT calculation
+        p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
+                 p_state is given priority over n_state.
         tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)
         tdscf_maxiter: Maximum number of TDSCF solver iterations (int)
 
@@ -452,9 +451,11 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
             Frequency dependent dipole polarizability (float, angstrom^3)
             Frequency dependent dipole polarizability tensor (xx, yy, zz, xy, xz, yz) (float, angstrom^3)
     """
-    polar_data = []
-    if omega is None: omega = [None]
-    elif type(omega) is float or type(omega) is int: omega = [omega]
+    polar_data = {}
+    if wavelength is None:
+        wavelength = [None]
+    elif type(wavelength) is float or type(wavelength) is int:
+        wavelength = [wavelength]
 
     if type(total_charge) is int:
         kwargs['charge'] = total_charge
@@ -466,7 +467,7 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
     if opt:
         psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
         if psi4mol.error_flag:
-            utils.radon_print('Psi4 optimization error in calc.polarizability.', level=2)
+            utils.radon_print('Psi4 optimization error in calc.polarizability_sos.', level=2)
             return polar_data
 
         coord = psi4mol.mol.GetConformer(confId).GetPositions()
@@ -477,24 +478,37 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
     psi4mol.basis = td_basis
     psi4mol.basis_gen = td_basis_gen
 
-    res = psi4mol.tddft(n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter)
+    res = psi4mol.tddft(n_state=n_state, p_state=p_state, tda=tda, tdscf_maxiter=tdscf_maxiter)
 
     if psi4mol.error_flag:
-        utils.radon_print('Psi4 TD-DFT calculation error in sim.qm.dynamic_polarizability_sos.', level=2)
+        utils.radon_print('Psi4 TD-DFT calculation error in sim.qm.polarizability_sos.', level=2)
 
-    for omg in omega:
-        alpha, tensor = polar_sos(res, omega=omg)
+    for l in wavelength:
+        alpha, tensor = polar_sos(res, wavelength=l)
 
-        p_data = {
-            'qm_polarizability': alpha,
-            'qm_polarizability_xx': tensor[0, 0],
-            'qm_polarizability_yy': tensor[1, 1],
-            'qm_polarizability_zz': tensor[2, 2],
-            'qm_polarizability_xy': (tensor[0, 1]+tensor[1, 0])/2,
-            'qm_polarizability_xz': (tensor[0, 2]+tensor[2, 0])/2,
-            'qm_polarizability_yz': (tensor[1, 2]+tensor[2, 1])/2,
-        }
-        polar_data.append(p_data)
+        if l is None:
+            p_data = {
+                'qm_polarizability_sos': alpha,
+                'qm_polarizability_sos_xx': tensor[0, 0],
+                'qm_polarizability_sos_yy': tensor[1, 1],
+                'qm_polarizability_sos_zz': tensor[2, 2],
+                'qm_polarizability_sos_xy': (tensor[0, 1]+tensor[1, 0])/2,
+                'qm_polarizability_sos_xz': (tensor[0, 2]+tensor[2, 0])/2,
+                'qm_polarizability_sos_yz': (tensor[1, 2]+tensor[2, 1])/2,
+            }
+            polar_data.update(p_data)
+
+        else:
+            p_data = {
+                'qm_polarizability_sos_%i' % int(l): alpha,
+                'qm_polarizability_sos_%i_xx' % int(l): tensor[0, 0],
+                'qm_polarizability_sos_%i_yy' % int(l): tensor[1, 1],
+                'qm_polarizability_sos_%i_zz' % int(l): tensor[2, 2],
+                'qm_polarizability_sos_%i_xy' % int(l): (tensor[0, 1]+tensor[1, 0])/2,
+                'qm_polarizability_sos_%i_xz' % int(l): (tensor[0, 2]+tensor[2, 0])/2,
+                'qm_polarizability_sos_%i_yz' % int(l): (tensor[1, 2]+tensor[2, 1])/2,
+            }
+            polar_data.update(p_data)
 
     if td_output:
         json_data = {}
@@ -517,12 +531,11 @@ def polarizability_sos(mol, omega=None, confId=0, opt=True, work_dir=None, tmp_d
     return polar_data
 
 
-# Experimental
-def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='refractive_index_sos',
+def refractive_index_sos(mols, density, ratio=None, wavelength=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='refractive_index_sos',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='refractive_index_sos_tddft.json',
+        n_state=1000, p_state=None, tda=False, tdscf_maxiter=60, td_output='refractive_index_sos_tddft.json',
         total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.refractive_index_sos
@@ -535,7 +548,7 @@ def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=Tr
     
     Optional args:
         ratio: ratio of repeating units in a copolymer
-        omega: wavelength [nm]. If None, static dipole polarizability is computed.
+        wavelength: wavelength [nm]. If None, static dipole polarizability is computed.
         confID: Target conformer ID (int)
         opt: Do optimization (boolean)
         work_dir: Work directory path (str)
@@ -547,7 +560,9 @@ def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=Tr
         td_method: Using method in the TD-DFT calculation (str, default:cam-b3lyp-d3bj)
         td_basis: Using basis set in the TD-DFT calculation (str, default:6-311+G(2d,p))
         td_basis_gen: Using basis set in the TD-DFT calculation for each element
-        n_state: Number of state in TD-DFT calculation
+        n_state: Number of state in the TD-DFT calculation
+        p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
+                 p_state is given priority over n_state.
         tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)
         tdscf_maxiter: Maximum number of TDSCF solver iterations (int)
 
@@ -557,45 +572,53 @@ def refractive_index_sos(mols, density, ratio=None, omega=None, confId=0, opt=Tr
             frequency dependent dipole polarizability of repeating units (float, angstrom^3)
             frequency dependent dipole polarizability tensor of repeating units (float, angstrom^3)
     """
-    ri_data = []
-    if omega is None: omega = [None]
-    elif type(omega) is float or type(omega) is int: omega = [omega]
+    if wavelength is None:
+        wavelength = [None]
+    elif type(wavelength) is float or type(wavelength) is int:
+        wavelength = [wavelength]
 
     if type(mols) is Chem.Mol: mols = [mols]
     mol_weight = [calc.molecular_weight(mol) for mol in mols]
-    p_list = []
-    a_list = []
 
+    p_data = {}
+    a_list = []
     for i, mol in enumerate(mols):
-        polar_data = polarizability_sos(mol, omega=omega, confId=confId, opt=opt, work_dir=work_dir, tmp_dir=tmp_dir, log_name='%s_%i' % (log_name, i),
-                                opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
+        polar_data = polarizability_sos(mol, wavelength=wavelength, confId=confId, opt=opt, work_dir=work_dir, tmp_dir=tmp_dir,
+                                log_name='%s_%i' % (log_name, i), opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
                                 geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
                                 td_method=td_method, td_basis=td_basis, td_basis_gen=td_basis_gen,
-                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
+                                n_state=n_state, p_state=p_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
                                 total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
-        p_list.append(polar_data)
-        a_list.append([p['qm_polarizability'] for p in polar_data])
+        for k, v in polar_data.items():
+            p_data['%s_monomer%i' % (k, i+1)] = v
 
-    for i in range(len(omega)): 
-        r_data = {}
-        r_data['refractive_index'] = calc.refractive_index(a_list[:][i], density, mol_weight, ratio=ratio)
+        a_tmp = []
+        for l in wavelength:
+            if l is None:
+                a_tmp.append(polar_data['qm_polarizability_sos'])
+            else:
+                a_tmp.append(polar_data['qm_polarizability_sos_%i' % int(l)])
+        a_list.append(a_tmp)
+    a_list = np.array(a_list)
 
-        for j in range(len(mols)):
-            for k in p_list[j][i].keys():
-                r_data['%s_monomer%i' % (k, j+1)] = p_list[j][i][k]
+    ri_data = {}
+    for i, l in enumerate(wavelength): 
+        if i is None:
+            ri_data['refractive_index_sos'] = calc.refractive_index(a_list[:, i], density, mol_weight, ratio=ratio)
+        else:
+            ri_data['refractive_index_sos_%i' % int(l)] = calc.refractive_index(a_list[:, i], density, mol_weight, ratio=ratio)
 
-        ri_data.append(r_data)
+    ri_data.update(p_data)
 
     return ri_data
 
 
-# Experimental
 def abbe_number_sos(mols, density, ratio=None, confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='abbe_number_sos',
         opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
         td_method='cam-b3lyp-d3bj', td_basis='6-311+G(2d,p)', td_basis_gen={'Br': '6-311G(d,p)', 'I': 'lanl2dz'},
-        n_state=1000, tda=False, tdscf_maxiter=60, td_output='abbe_number_sos_tddft.json',
+        n_state=1000, p_state=0.003, tda=False, tdscf_maxiter=60, td_output='abbe_number_sos_tddft.json',
         total_charge=None, total_multiplicity=None, **kwargs):
     """
     sim.qm.abbe_number_sos
@@ -619,7 +642,9 @@ def abbe_number_sos(mols, density, ratio=None, confId=0, opt=True, work_dir=None
         td_method: Using method in the TD-DFT calculation (str, default:cam-b3lyp-d3bj)
         td_basis: Using basis set in the TD-DFT calculation (str, default:6-311+G(2d,p))
         td_basis_gen: Using basis set in the TD-DFT calculation for each element
-        n_state: Number of state in TD-DFT calculation
+        n_state: Number of state in the TD-DFT calculation
+        p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
+                 p_state is given priority over n_state.
         tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)
         tdscf_maxiter: Maximum number of TDSCF solver iterations (int)
 
@@ -632,45 +657,24 @@ def abbe_number_sos(mols, density, ratio=None, confId=0, opt=True, work_dir=None
             frequency dependent dipole polarizability of repeating units (float, angstrom^3)
             frequency dependent dipole polarizability tensor of repeating units (float, angstrom^3)
     """
-    abbe_data = {}
-
     if type(mols) is Chem.Mol: mols = [mols]
     mol_weight = [calc.molecular_weight(mol) for mol in mols]
-    alpha_656 = []
-    alpha_589 = []
-    alpha_486 = []
 
-    for i, mol in enumerate(mols):
-        polar_data = polarizability_sos(mol, omega=[656, 589, 486], confId=confId, opt=opt, work_dir=work_dir, tmp_dir=tmp_dir,
-                                log_name='%s_%i' % (log_name, i), opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
-                                geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
-                                td_method=td_method, td_basis=td_basis, td_basis_gen=td_basis_gen,
-                                n_state=n_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
-                                total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
+    ri_data = refractive_index_sos(mols, density=density, ratio=ratio, wavelength=[656, 589, 486], confId=confId,
+                            opt=opt, work_dir=work_dir, tmp_dir=tmp_dir, log_name=log_name,
+                            opt_method=opt_method, opt_basis=opt_basis, opt_basis_gen=opt_basis_gen,
+                            geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm,
+                            td_method=td_method, td_basis=td_basis, td_basis_gen=td_basis_gen,
+                            n_state=n_state, p_state=p_state, tda=tda, tdscf_maxiter=tdscf_maxiter, td_output=td_output,
+                            total_charge=total_charge, total_multiplicity=total_multiplicity, **kwargs)
 
-        alpha_656.append(polar_data[0]['qm_polarizability'])
-        alpha_589.append(polar_data[1]['qm_polarizability'])
-        alpha_486.append(polar_data[2]['qm_polarizability'])
-
-        for l, p_data in zip([656, 589, 486], polar_data):
-            abbe_data['qm_polarizability_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability']
-            abbe_data['qm_polarizability_xx_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_xx']
-            abbe_data['qm_polarizability_yy_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_yy']
-            abbe_data['qm_polarizability_zz_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_zz']
-            abbe_data['qm_polarizability_xy_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_xy']
-            abbe_data['qm_polarizability_xz_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_xz']
-            abbe_data['qm_polarizability_yz_%i_monomer%i' % (l, (i+1))] = p_data['qm_polarizability_yz']
-
-    n_656 = calc.refractive_index(alpha_656, density, mol_weight, ratio=ratio)
-    n_589 = calc.refractive_index(alpha_589, density, mol_weight, ratio=ratio)
-    n_486 = calc.refractive_index(alpha_486, density, mol_weight, ratio=ratio)
+    n_656 = ri_data['refractive_index_sos_656']
+    n_589 = ri_data['refractive_index_sos_589']
+    n_486 = ri_data['refractive_index_sos_486']
 
     abbe_data = {
-        'abbe_number': (n_589 - 1)/(n_486 - n_656),
-        'refractive_index_656': n_656,
-        'refractive_index_589': n_589,
-        'refractive_index_486': n_486,
-        **abbe_data
+        'abbe_number_sos': (n_589 - 1)/(n_486 - n_656),
+        **ri_data
     }
 
     return abbe_data

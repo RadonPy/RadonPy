@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -23,7 +23,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 MD_avail = True
 try:
@@ -660,7 +660,7 @@ def vdw_volume(mol, confId=0, method='grid', radii='rdkit', gridSpacing=0.2):
         return np.sum(V_vdw)
     
     else:
-        radon_print('Illegal input of method = %s' % method, level=3)
+        utils.radon_print('Illegal input of method = %s' % method, level=3)
         return np.nan
 
 
@@ -730,7 +730,7 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
     """
 
     if not hasattr(mol, 'cell'):
-        radon_print('The cell attribute of the input Mol object is undefined', level=2)
+        utils.radon_print('The cell attribute of the input Mol object is undefined', level=2)
         return np.nan
 
     #coord = wrap_mol(mol, confId=confId)
@@ -1131,7 +1131,7 @@ def refractive_index(polarizability, density, mol_weight, ratio=None):
     Args:
         polarizability: list of polarizability of repeating units (float, angstrom^3)
         density: (float, g/cm^3)
-        mol_weight: list of molecular weight of repeating units (float, angstrom^3)
+        mol_weight: list of molecular weight of repeating units (float, g mol^-1)
         ratio: ratio of repeating units in a copolymer
 
     Return:
@@ -1154,7 +1154,7 @@ def refractive_index(polarizability, density, mol_weight, ratio=None):
         ratio = np.array(ratio / np.sum(ratio))
 
     alpha = polarizability * const.ang2cm**3    # angstrom^3 -> cm^3
-    phi = np.sum( ( (4*np.pi/3) * (alpha*density*const.NA)/mol_weight ) * ratio )   # (cm^3) * (g cm^-3) * (mol^-1) / (g mol^-1)
+    phi = (4*np.pi*density*const.NA/3) * np.sum(alpha*ratio)/np.sum(mol_weight*ratio)   # (g cm^-3) * (mol^-1) * (cm^3) / (g mol^-1)
     ri = np.sqrt((1+2*phi)/(1-phi))
 
     return ri

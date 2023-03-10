@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .lammps import LAMMPS, Analyze
 from ..core import calc, utils
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 
 class MD():
@@ -57,6 +57,7 @@ class MD():
         self.time_step = kwargs.get('time_step', 1.0)
         self.drude = kwargs.get('drude', False)
         self.set_init_velocity = kwargs.get('set_init_velocity', None)
+        self.log_append = kwargs.get('log_append', True)
         self.wf = []
         self.add = []
         self.add_f = []

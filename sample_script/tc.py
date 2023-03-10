@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.2.1'
+__version__ = '0.3.0b2'
 
 import matplotlib
 matplotlib.use('Agg')
@@ -20,8 +20,10 @@ import radonpy
 # For Fugaku
 #from radonpy.core import const
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
+#const.check_package_disable = True
 
 from radonpy.core import utils, calc
+from radonpy.sim import lammps
 from radonpy.sim.preset import eq, tc
 
 

@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, calc, utils
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -548,7 +548,7 @@ class Psi4w():
         return hessian.to_array()*const.au2kj/const.bohr2ang/const.bohr2ang # Hartree/bohr^2 -> kJ/(mol angstrom^2)
 
 
-    def tddft(self, n_state=6, triplet='NONE', tda=False, tdscf_maxiter=60, **kwargs):
+    def tddft(self, n_state=6, p_state=None, triplet='NONE', tda=False, tdscf_maxiter=60, **kwargs):
         """
         Psi4w.tddft
 
@@ -557,6 +557,8 @@ class Psi4w():
         Optional args:
             wfn: Store the wfn object of Psi4 (boolean)
             n_state: Number of states (int). If n_state < 0, all excitation states are calculated.
+            p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
+                     p_state is given priority over n_state.
             triplet: NONE, ALSO, or ONLY
             tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)
             tdscf_maxiter: Maximum number of TDSCF solver iterations (int)
@@ -582,7 +584,13 @@ class Psi4w():
         try:
             energy, self.wfn = psi4.energy(self.method, molecule=pmol, return_wfn=True, **kwargs)
             max_n_states = int((self.wfn.nmo() - self.wfn.nalpha()) * self.wfn.nalpha())
-            if n_state > max_n_states or n_state < 0:
+            if p_state is not None:
+                if 0.0 < p_state <= 1.0:
+                    n_state = int(max_n_states * p_state)
+                    utils.radon_print('n_state of Psi4 TD-DFT calculation set to %i.' % n_state, level=1)
+                else:
+                    utils.radon_print('p_state=%f of Psi4 TD-DFT calculation is out of range (0.0 < p_state <= 1.0).' % float(p_state), level=3)
+            elif n_state > max_n_states or n_state < 0:
                 utils.radon_print('n_state of Psi4 TD-DFT calculation set to %i.' % max_n_states, level=1)
                 n_state = max_n_states
             res = psi4.procrouting.response.scf_response.tdscf_excitations(self.wfn, states=n_state)
@@ -919,8 +927,8 @@ class Psi4w():
 
         except psi4.SCFConvergenceError as e:
             utils.radon_print('Psi4 SCF convergence error. %s' % e, level=2)
-            p_mu[i, 1] = np.array([np.nan, np.nan, np.nan])
             self.error_flag = True
+            return [np.nan]
 
         except BaseException as e:
             self._fin_psi4()
@@ -943,9 +951,9 @@ class Psi4w():
                 if unit == 'NM' or unit == 'nm':
                     lamda = round(omega[i])
                 elif unit == 'AU' or unit == 'au':
-                    lamda = round( (const.h * const.c) / (omega[i] * au2ev * const.e) * 1e9 )
+                    lamda = round( (const.h * const.c) / (omega[i] * const.au2ev * const.e) * 1e9 )
                 elif unit == 'EV' or unit == 'ev':
-                    lamda = round( (const.h * const.c) / (omega[i] * au2kj) * 1e6 )
+                    lamda = round( (const.h * const.c) / (omega[i] * const.au2kj) * 1e6 )
                 elif unit == 'HZ' or unit == 'hz':
                     lamda = round( const.c / omega[i] * 1e9 )
                 else:
@@ -1000,6 +1008,7 @@ class Psi4w():
         return alpha, tensor
 
 
+    # Experimental
     def cphf_hyperpolar(self, eps=1e-4, mp=0, **kwargs):
         """
         psi4w.polar

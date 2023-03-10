@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -20,7 +20,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b2'
 
 MD_avail = True
 try:
@@ -637,7 +637,7 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
                 res_name_init=res_name_init, res_name=res_name, label=label, label_init=label_init,
                 opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
             )
-
+            
     return poly
 
 
@@ -1261,7 +1261,7 @@ def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry_step=1000,
         mon_idx = [1, 0]
         chi_inv = [False, False]
     elif H2_flag1:
-        mon_idx = [0, 1]
+        mon_idx = [0, 2]
         chi_inv = [False, False]
     else:
         mon_idx = [1, 0, 2]
@@ -1808,7 +1808,7 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
-        cell = replicate_cell(mol, 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mol, 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
             cell_copy = utils.deepcopy_mol(cell)
@@ -1900,7 +1900,7 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
 
     for k in range(m):
         cell_n = cell.GetNumAtoms()
-        cell = replicate_cell(mols[0], 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mols[0], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n), desc='[Unit cell generation %i/%i]' % (k+1, m), disable=const.tqdm_disable):
             for j, mol in enumerate(mols):
@@ -2005,7 +2005,7 @@ def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None,
 
     for j in range(m):
         cell_n = cell.GetNumAtoms()
-        cell = replicate_cell(mols[mol_index[j, 0]], 1, cell=cell, density=None, retry=retry, threshold=threshold)
+        cell = amorphous_cell(mols[mol_index[j, 0]], 1, cell=cell, density=None, retry=retry, threshold=threshold)
 
         for i in tqdm(range(n-1), desc='[Unit cell generation %i/%i]' % (j+1, m), disable=const.tqdm_disable):
             cell_copy = utils.deepcopy_mol(cell)
@@ -2280,7 +2280,7 @@ def super_cell(cell, x=1, y=1, z=1, confId=0):
 
     for ix in range(x-1):
         xcell_n = xcell.GetNumAtoms()
-        xcell = combine_mols(xcell, xcell)
+        xcell = combine_mols(xcell, cell)
         new_coord = cell_coord + np.array([lx*(ix+1), 0.0, 0.0])
         for i in range(cell_n):
             xcell.GetConformer(0).SetAtomPosition(
@@ -3525,7 +3525,7 @@ def substruct_match_smiles(poly_smiles, sub_smiles, useChirality=False):
     return pmol.HasSubstructMatch(smol, useChirality=useChirality)
 
 
-def substruct_match_smiles_list(smiles, smi_series, mp=None):
+def substruct_match_smiles_list(smiles, smi_series, mp=None, boolean=False):
     
     if mp is None:
         mp = utils.cpu_count()
@@ -3537,9 +3537,11 @@ def substruct_match_smiles_list(smiles, smi_series, mp=None):
         results = executor.map(_substruct_match_smiles_worker, args)
         res = [r for r in results]
     
-    smi_list = smi_series[res].index.values.tolist()
-
-    return smi_list
+    if boolean:
+        return res
+    else:
+        smi_list = smi_series[res].index.values.tolist()
+        return smi_list
 
 
 def _substruct_match_smiles_worker(args):
@@ -3721,7 +3723,7 @@ def _ff_test_mp_worker(args):
 def monomerization_smiles(smiles, min_length=1):
     
     if smiles.count('*') != 2:
-        utils.radon_print('Illegal number of connecting points in SMILES. %s' % smiles_in, level=2)
+        utils.radon_print('Illegal number of connecting points in SMILES. %s' % smiles, level=2)
         return smiles
 
     smi = smiles.replace('[*]', '[3H]')
@@ -3767,9 +3769,39 @@ def monomerization_smiles(smiles, min_length=1):
 def extract_mainchain(smiles):
 
     main_smi = None
+
+    fsmi = fragmentation_main_side_chain(smiles)
+
+    for s in fsmi:
+        if '[3H]' in s:
+            try:
+                main_smi = Chem.MolToSmiles(Chem.MolFromSmiles(s.replace('[3H]', '*')))
+            except:
+                utils.radon_print('Cannot convert to canonical SMILES from %s' % smi, level=2)
+
+    return main_smi
+
+
+def extract_sidechain(smiles):
+
+    side_smi = []
+
+    fsmi = fragmentation_main_side_chain(smiles)
+
+    for s in fsmi:
+        if '[3H]' not in s:
+            try:
+                side_smi.append(Chem.MolToSmiles(Chem.MolFromSmiles(s)))
+            except:
+                utils.radon_print('Cannot convert to canonical SMILES from %s' % smi, level=2)
+
+    return side_smi
+    
+
+def fragmentation_main_side_chain(smiles):
     if smiles.count('*') != 2:
         utils.radon_print('Illegal number of connecting points in SMILES. %s' % smiles, level=2)
-        return main_smi
+        return None
 
     smi = smiles.replace('[*]', '[3H]')
     smi = smi.replace('*', '[3H]')
@@ -3779,7 +3811,7 @@ def extract_mainchain(smiles):
         mol = Chem.AddHs(mol)
     except:
         utils.radon_print('Cannot convert to Mol object from %s' % smiles, level=2)
-        return main_smi
+        return None
 
     set_mainchain_flag(mol)
 
@@ -3797,18 +3829,11 @@ def extract_mainchain(smiles):
     except:
         utils.radon_print('Cannot convert to fragmented Mol', level=2)
         RDLogger.EnableLog('rdApp.*')
-        return main_smi
+        return None
 
     RDLogger.EnableLog('rdApp.*')
 
-    for s in fsmi:
-        if '[3H]' in s:
-            try:
-                main_smi = Chem.MolToSmiles(Chem.MolFromSmiles(s.replace('[3H]', '*')))
-            except:
-                utils.radon_print('Cannot convert to canonical SMILES from %s' % smi, level=2)
-
-    return main_smi
+    return fsmi
 
 
 def polyinfo_classifier(smi, return_flag=False):
