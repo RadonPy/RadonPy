@@ -536,14 +536,22 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
         poly = utils.deepcopy_mol(init_poly)
         set_linker_flag(poly, label=label_init)
         poly_copy = []
-        if Chem.GetSSSR(poly) > 0:
+        sssr_tmp = Chem.GetSSSR(poly)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     for i, mol in enumerate(mols):
         set_linker_flag(mol, label=label[i][0])
         mols_copy.append(utils.deepcopy_mol(mol))
         mols_inv.append(calc.mirror_inversion_mol(mol))
-        if Chem.GetSSSR(mol) > 0:
+        sssr_tmp = Chem.GetSSSR(mol)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     for i in tqdm(range(start_num, len(m_idx)), desc='[Polymerization]', disable=const.tqdm_disable):
@@ -1503,11 +1511,20 @@ def amorphous_cell(mols, n, cell=None, density=0.1, retry=20, retry_step=1000, t
         cell_c = Chem.Mol()
     else:
         cell_c = utils.deepcopy_mol(cell)
-        if Chem.GetSSSR(cell_c) > 0:
+
+        sssr_tmp = Chem.GetSSSR(cell_c)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     for mol_c in mols_c:
-        if Chem.GetSSSR(mol_c) > 0:
+        sssr_tmp = Chem.GetSSSR(mol_c)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     if density is None and hasattr(cell_c, 'cell'):
@@ -1643,7 +1660,11 @@ def nematic_cell(mols, n, cell=None, density=0.1, retry=20, retry_step=1000, thr
         cell_c = Chem.Mol()
     else:
         cell_c = utils.deepcopy_mol(cell)
-        if Chem.GetSSSR(cell_c) > 0:
+        sssr_tmp = Chem.GetSSSR(cell_c)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     mols_c = [utils.deepcopy_mol(mol) for mol in mols]
@@ -1651,7 +1672,11 @@ def nematic_cell(mols, n, cell=None, density=0.1, retry=20, retry_step=1000, thr
     # Alignment molecules
     for mol in mols_c:
         Chem.rdMolTransforms.CanonicalizeConformer(mol.GetConformer(0), ignoreHs=False)
-        if Chem.GetSSSR(mol_c) > 0:
+        sssr_tmp = Chem.GetSSSR(mol_c)
+        if type(sssr_tmp) is int:
+            if sssr_tmp > 0:
+                has_ring = True
+        elif len(sssr_tmp) > 0:  # For RDKit version >= 2022.09
             has_ring = True
 
     if density is None and hasattr(cell_c, 'cell'):
