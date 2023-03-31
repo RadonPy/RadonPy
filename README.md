@@ -128,7 +128,8 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
-## Related project
+## Related projects
+- [XenonPy (Machine learning tools for materials informatics)](https://github.com/yoshida-lab/XenonPy)
 - [SMiPoly (Polymerization rule-based virtual polymer generator)](https://github.com/PEJpOhno/SMiPoly)
 
 ## Copyright and licence
