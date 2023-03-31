@@ -2,6 +2,7 @@
 
 ## Overview
 This branch is a version under development.
+
 RadonPy is the first open-source Python library for fully automated calculation for a comprehensive set of polymer properties, using all-atom classical MD simulations. For a given polymer repeating unit with its chemical structure, the entire process of the MD simulation can be carried out fully automatically, including molecular modelling, equilibrium and non-equilibrium MD simulations, automatic determination of the completion of equilibration, scheduling of restarts in case of failure to converge, and property calculations in the post-process step. In this release, the library comprises the calculation of 15 properties at the amorphous state.
 
 ## Requirement
@@ -102,8 +103,6 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 		- Isentropic compressibility
 		- Isentropic bulk modulus
 		- Static dielectric constant
-		- Refractive index
-		- Abbe's number
 		- Radius of gyration
 		- End-to-end distance
 		- Nematic order parameter
@@ -130,7 +129,7 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
 ## Related project
-- [SMiPoly](https://github.com/PEJpOhno/SMiPoly)
+- [SMiPoly (Polymerization rule-based virtual polymer generator)](https://github.com/PEJpOhno/SMiPoly)
 
 ## Copyright and licence
 ©Copyright 2023 The RadonPy developers, all rights reserved.
