@@ -22,7 +22,7 @@ except ImportError:
     mic_avail = False
 
 
-__version__ = '0.3.0b2'
+__version__ = '0.3.0b3'
 
 
 class FF_descriptor():
@@ -582,8 +582,8 @@ class FF_descriptor():
             u = self.polar_scale.unscale(self.mu[f_idx, n] + self.s[f_idx]*sigma)
 
         elif f == 'k_angle':
-            l = self.k_angle_scale.unscale(self.mu[f_idx, n] - self.s[f_idx]*sigma)
-            u = self.k_angle_scale.unscale(self.mu[f_idx, n] + self.s[f_idx]*sigma)
+            l = self.k_ang_scale.unscale(self.mu[f_idx, n] - self.s[f_idx]*sigma)
+            u = self.k_ang_scale.unscale(self.mu[f_idx, n] + self.s[f_idx]*sigma)
             for key, val in self.ff.param.at.items():
                 if l <= val.k <= u:
                     atype.append(key)
