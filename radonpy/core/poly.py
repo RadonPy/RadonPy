@@ -20,7 +20,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.3.0b2'
+__version__ = '0.3.0b3'
 
 MD_avail = True
 try:
@@ -3771,6 +3771,8 @@ def extract_mainchain(smiles):
     main_smi = None
 
     fsmi = fragmentation_main_side_chain(smiles)
+    if fsmi is None:
+        return main_smi
 
     for s in fsmi:
         if '[3H]' in s:
@@ -3787,6 +3789,8 @@ def extract_sidechain(smiles):
     side_smi = []
 
     fsmi = fragmentation_main_side_chain(smiles)
+    if fsmi is None:
+        return side_smi
 
     for s in fsmi:
         if '[3H]' not in s:
@@ -3796,7 +3800,7 @@ def extract_sidechain(smiles):
                 utils.radon_print('Cannot convert to canonical SMILES from %s' % smi, level=2)
 
     return side_smi
-    
+
 
 def fragmentation_main_side_chain(smiles):
     if smiles.count('*') != 2:
