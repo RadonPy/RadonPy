@@ -1,6 +1,7 @@
 ![logo](https://user-images.githubusercontent.com/83273612/160471242-40d7d7f1-d2cd-4658-b4e1-75f5e608665d.png)
 
 ## Overview
+This branch is a version under development.
 RadonPy is the first open-source Python library for fully automated calculation for a comprehensive set of polymer properties, using all-atom classical MD simulations. For a given polymer repeating unit with its chemical structure, the entire process of the MD simulation can be carried out fully automatically, including molecular modelling, equilibrium and non-equilibrium MD simulations, automatic determination of the completion of equilibration, scheduling of restarts in case of failure to converge, and property calculations in the post-process step. In this release, the library comprises the calculation of 15 properties at the amorphous state.
 
 ## Requirement
@@ -42,9 +43,9 @@ In this case, the environment variable must be set:
 export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 ```
 
-4. Installation of RadonPy
+4. Installation of RadonPy (development version)
 ```
-git clone -b main https://github.com/RadonPy/RadonPy.git
+git clone -b develop_0.3 https://github.com/RadonPy/RadonPy.git
 export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 ```
 
@@ -55,11 +56,12 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 	- Cherge calculation (RESP, ESP, Mulliken, Lowdin, Gasteiger)
 	- Electronic property calculation (HOMO, LUMO, dipole moment, polarizability)
 	- Generation of a polymer chain
-		- Homopolymer
-		- Alternating copolymer
-		- Random copolymer
-		- Block copolymer
+		- Homopolymers
+		- Alternating copolymers
+		- Random copolymers
+		- Block copolymers
 		- Blanched polymers
+		- Post-modified polymers
 	- Generation of a simulation cell
 		- Amorphous
 		- Polymer mixture
@@ -89,8 +91,25 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 		- Nematic order parameter
 	- Using LAMMPS and Psi4 as calculation engines of MD and DFT calculations
 - Implementation of add-on like presets to allow for proper and easy execution of polymer MD calculations
-	- Equilibration MD
-	- Calculation of thermal conductivity with NEMD
+	- Equilibration MD (sim.preset.eq)
+		- Density
+		- Cp
+		- Cv
+		- Linear expansion coefficient
+		- Volumetric expansion coefficient
+		- Compressibility
+		- Bulk modulus
+		- Isentropic compressibility
+		- Isentropic bulk modulus
+		- Static dielectric constant
+		- Refractive index
+		- Abbe's number
+		- Radius of gyration
+		- End-to-end distance
+		- Nematic order parameter
+	- Calculation of thermal conductivity with NEMD (sim.preset.tc)
+		- Thermal conductivity
+		- Thermal diffusivity
 - Easy installation
     	- Only using open-source software
 - Tools for polymer informatics
