@@ -242,12 +242,25 @@ class Psi4w():
         """
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
+
+        opt_coord_type = 'INTERNAL'
+        dynamic_level = 0
+        if calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting was changed.')
+            opt_coord_type = 'BOTH'
+            dynamic_level = 2
+            geom_iter = int(2*geom_iter)
+
         opt_dict = {
             'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPTKING__ENSURE_BT_CONVERGENCE': True
+            'OPT_COORDINATES': opt_coord_type,
+            'OPTKING__ENSURE_BT_CONVERGENCE': True,
+            'CONSECUTIVE_BACKSTEPS': 10,
+            'DYNAMIC_LEVEL': dynamic_level,
+            'PRINT_OPT_PARAMS': True,
         }
 
         # Frozen coordinates
@@ -337,12 +350,26 @@ class Psi4w():
         energies = np.array([])
         coords = []
 
+        opt_coord_type = 'INTERNAL'
+        dynamic_level = 0
+        if calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting was changed.')
+            opt_coord_type = 'BOTH'
+            dynamic_level = 2
+            geom_iter = int(2*geom_iter)
+
         opt_dict = {
+            'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPTKING__ENSURE_BT_CONVERGENCE': True
+            'OPT_COORDINATES': opt_coord_type,
+            'OPTKING__ENSURE_BT_CONVERGENCE': True,
+            'CONSECUTIVE_BACKSTEPS': 10,
+            'DYNAMIC_LEVEL': dynamic_level,
+            'PRINT_OPT_PARAMS': True,
         }
+
         if len(atoms) == 2:
             opt_dict['OPTKING__FROZEN_DISTANCE'] = '%i %i' % (atoms[0]+1, atoms[1]+1)
             scan_type = 'bond length'
