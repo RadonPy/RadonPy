@@ -175,29 +175,17 @@ def count_mols(mol):
 
     Returns:
         Number of molecules (int)
+
+    Examples:
+        >>> mol = Chem.MolFromSmiles("CC.C=C")
+        >>> count_mols(mol)
+        2
+        >>> mol = Chem.MolFromSmiles("c1ccccc1")
+        >>> count_mols(mol)
+        1
     """
-
-    molid = 1
-    molcount = 0
-
-    # Clear mol_id
-    for atom in mol.GetAtoms():
-        atom.SetIntProp('mol_id', 0)
-
-    def recursive_count_mols(atom, molid):
-        for na in atom.GetNeighbors():
-            if na.GetIntProp('mol_id') == 0:
-                na.SetIntProp('mol_id', molid)
-                recursive_count_mols(na, molid)
-
-    for atom in mol.GetAtoms():
-        if atom.GetIntProp('mol_id') == 0:
-            atom.SetIntProp('mol_id', molid)
-            recursive_count_mols(atom, molid)
-            molid += 1
-            molcount += 1
-
-    return molcount
+    fragments = Chem.GetMolFrags(mol, asMols=True)
+    return len(fragments)
 
 
 def remove_atom(mol, idx):
