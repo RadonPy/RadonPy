@@ -13,7 +13,7 @@ import re
 import random
 import concurrent.futures as confu
 from rdkit import Chem
-from rdkit.Chem import AllChem, Descriptor
+from rdkit.Chem import AllChem, Descriptors
 from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
@@ -2629,7 +2629,7 @@ def polymer_stats(mol, df=False):
     molcount = utils.count_mols(mol)
     polymer_chains = Chem.GetMolFrags(mol, asMols=True)
     natom = np.array([chain.GetNumAtoms() for chain in polymer_chains])
-    molweight = np.array([Descriptor.MolWt(chain) for chain in polymer_chains])
+    molweight = np.array([Descriptors.MolWt(chain) for chain in polymer_chains])
 
     poly_stats = {
         'n_mol': molcount,
