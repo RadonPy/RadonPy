@@ -1,7 +1,4 @@
 include LICENSE
 include requirements.txt
-recursive-include radonpy *.py *.json
-recursive-exclude sample_script/*.*
-recursive-exclude data/*.*
-recursive-exclude docs/*.*
-
+recursive-include radonpy *.py
+recursive-include radonpy/ff/ff_dat *.json
