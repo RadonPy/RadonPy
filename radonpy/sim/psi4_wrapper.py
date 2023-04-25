@@ -224,7 +224,7 @@ class Psi4w():
         return energy*const.au2kj # Hartree -> kJ/mol
 
 
-    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=0, **kwargs):
         """
         Psi4w.optimize
 
@@ -243,11 +243,8 @@ class Psi4w():
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
 
-        opt_coord_type = 'INTERNAL'
-        dynamic_level = 0
-        if calc.find_liner_angle(self.mol):
-            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting was changed.')
-            opt_coord_type = 'BOTH'
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
 
@@ -256,9 +253,7 @@ class Psi4w():
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPT_COORDINATES': opt_coord_type,
             'OPTKING__ENSURE_BT_CONVERGENCE': True,
-            'CONSECUTIVE_BACKSTEPS': 10,
             'DYNAMIC_LEVEL': dynamic_level,
             'PRINT_OPT_PARAMS': True,
         }
@@ -327,7 +322,7 @@ class Psi4w():
         return energy*const.au2kj, coord # Hartree -> kJ/mol
 
 
-    def scan(self, atoms, values=[], opt=True, ignore_conv_error=False, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+    def scan(self, atoms, values=[], opt=True, ignore_conv_error=False, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=0, **kwargs):
         """
         Psi4w.scan
 
@@ -350,11 +345,8 @@ class Psi4w():
         energies = np.array([])
         coords = []
 
-        opt_coord_type = 'INTERNAL'
-        dynamic_level = 0
-        if calc.find_liner_angle(self.mol):
-            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting was changed.')
-            opt_coord_type = 'BOTH'
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
 
@@ -363,9 +355,7 @@ class Psi4w():
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPT_COORDINATES': opt_coord_type,
             'OPTKING__ENSURE_BT_CONVERGENCE': True,
-            'CONSECUTIVE_BACKSTEPS': 10,
             'DYNAMIC_LEVEL': dynamic_level,
             'PRINT_OPT_PARAMS': True,
         }
