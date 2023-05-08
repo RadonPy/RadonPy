@@ -18,7 +18,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.2.3'
+__version__ = '0.2.6'
 
 MD_avail = True
 try:
@@ -2611,7 +2611,7 @@ def set_cell_param_conf(mol, confId, xhi, xlo, yhi, ylo, zhi, zlo):
     return mol
 
 
-def polymer_stats(mol, df=False):
+def polymer_stats(mol, df=False, join=False):
     """
     poly.polymer_stats
 
@@ -2633,10 +2633,10 @@ def polymer_stats(mol, df=False):
 
     poly_stats = {
         'n_mol': molcount,
-        'n_atom': natom if not df else '/'.join([str(n) for n in natom]),
+        'n_atom': natom if not df and not join else '/'.join([str(n) for n in natom]),
         'n_atom_mean': np.mean(natom),
         'n_atom_var': np.var(natom),
-        'mol_weight': molweight if not df else '/'.join([str(n) for n in molweight]),
+        'mol_weight': molweight if not df and not join else '/'.join([str(n) for n in molweight]),
         'Mn': np.mean(molweight),
         'Mw': np.sum(molweight**2)/np.sum(molweight),
         'Mw/Mn': np.sum(molweight**2)/np.sum(molweight)/np.mean(molweight)
