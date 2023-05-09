@@ -47,7 +47,7 @@ setup(
         'minepy',
     ],
     extras_require={
-        'sim':[
+        'lammps':[
             'lammps>=2020.03.03'
         ],
     },
