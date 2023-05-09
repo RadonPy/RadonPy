@@ -17,6 +17,7 @@ import radonpy
 from radonpy.core import const
 const.mpi4py_avail = os.environ.get('RadonPy_mpi4py', False) == 'True'
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
+#const.check_package_disable = True
 
 from radonpy.core import utils, calc
 from radonpy.ff.gaff2_mod import GAFF2_mod

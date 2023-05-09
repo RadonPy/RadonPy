@@ -17,6 +17,7 @@ import radonpy
 # For Fugaku
 #from radonpy.core import const
 #const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
+#const.check_package_disable = True
 
 from radonpy.core import utils, calc, poly
 from radonpy.ff.gaff2_mod import GAFF2_mod
@@ -129,7 +130,7 @@ if __name__ == '__main__':
     # Generate random copolymer chain
     elif len(mols) > 1 and data['copoly_type'] == 'random':
         copoly_list = poly.random_copolymerize_rw_mp(mols, n, ratio=ratio, tacticity=data['input_tacticity'],
-                                                     nchain=data['input_nchain'], mp=min([omp*mpi, data['input_nchain'], 60]))
+                                                     nchain=data['input_nchain'], mp=min([max(1,omp*mpi), data['input_nchain'], 60]))
         for i in range(data['input_nchain']):
             copoly_list[i] = poly.terminate_rw(copoly_list[i], ter)
 

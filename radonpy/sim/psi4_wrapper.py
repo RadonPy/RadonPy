@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, calc, utils
 
-__version__ = '0.2.3'
+__version__ = '0.2.6'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -224,7 +224,7 @@ class Psi4w():
         return energy*const.au2kj # Hartree -> kJ/mol
 
 
-    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=0, **kwargs):
         """
         Psi4w.optimize
 
@@ -242,12 +242,20 @@ class Psi4w():
         """
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
+
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
+            dynamic_level = 2
+            geom_iter = int(2*geom_iter)
+
         opt_dict = {
             'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPTKING__ENSURE_BT_CONVERGENCE': True
+            'OPTKING__ENSURE_BT_CONVERGENCE': True,
+            'DYNAMIC_LEVEL': dynamic_level,
+            'PRINT_OPT_PARAMS': True,
         }
 
         # Frozen coordinates
@@ -314,7 +322,7 @@ class Psi4w():
         return energy*const.au2kj, coord # Hartree -> kJ/mol
 
 
-    def scan(self, atoms, values=[], opt=True, ignore_conv_error=False, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', **kwargs):
+    def scan(self, atoms, values=[], opt=True, ignore_conv_error=False, geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=0, **kwargs):
         """
         Psi4w.scan
 
@@ -337,12 +345,21 @@ class Psi4w():
         energies = np.array([])
         coords = []
 
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+            utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
+            dynamic_level = 2
+            geom_iter = int(2*geom_iter)
+
         opt_dict = {
+            'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPTKING__ENSURE_BT_CONVERGENCE': True
+            'OPTKING__ENSURE_BT_CONVERGENCE': True,
+            'DYNAMIC_LEVEL': dynamic_level,
+            'PRINT_OPT_PARAMS': True,
         }
+
         if len(atoms) == 2:
             opt_dict['OPTKING__FROZEN_DISTANCE'] = '%i %i' % (atoms[0]+1, atoms[1]+1)
             scan_type = 'bond length'
@@ -837,11 +854,19 @@ class Psi4w():
             # concurrent.futures
             else:
                 utils.radon_print('Parallel method: concurrent.futures.ProcessPoolExecutor')
-                with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
-                    results = executor.map(_polar_mp_worker, args)
-                    for i, res in enumerate(results):
-                        p_mu[(i // 3), (i % 3)] = res[0]
-                        if res[1]: self.error_flag = True
+                if mp == 1:
+                    for i, arg in enumerate(args):
+                        with confu.ProcessPoolExecutor(max_workers=1, mp_context=MP.get_context('spawn')) as executor:
+                            results = executor.map(_polar_mp_worker, [arg])
+                            for res in results:
+                                p_mu[(i // 3), (i % 3)] = res[0]
+                                if res[1]: self.error_flag = True
+                else:
+                    with confu.ProcessPoolExecutor(max_workers=mp, mp_context=MP.get_context('spawn')) as executor:
+                        results = executor.map(_polar_mp_worker, args)
+                        for i, res in enumerate(results):
+                            p_mu[(i // 3), (i % 3)] = res[0]
+                            if res[1]: self.error_flag = True
 
             utils.restore_picklable(self.mol)
             self.wfn = wfn_copy
@@ -1418,7 +1443,7 @@ def _polar_mp_worker(args):
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan
     error_flag = False
 
-    utils.radon_print('Worker process %s%i start on %s.' % (ax, i, socket.gethostname()))
+    utils.radon_print('Worker process %s%i start on %s. PID: %i' % (ax, i, socket.gethostname(), os.getpid()))
 
     utils.restore_picklable(psi4obj.mol)
     pmol = psi4obj._init_psi4('symmetry c1', output='./%s_psi4_polar_%s%i.log' % (psi4obj.name, ax, i))
@@ -1465,7 +1490,7 @@ def _cphf_hyperpolar_mp_worker(args):
     j = 0 if ax == 'x' else 1 if ax == 'y' else 2 if ax == 'z' else np.nan
     error_flag = False
 
-    utils.radon_print('Worker process %s%i start on %s.' % (ax, i, socket.gethostname()))
+    utils.radon_print('Worker process %s%i start on %s. PID: %i' % (ax, i, socket.gethostname(), os.getpid()))
 
     utils.restore_picklable(psi4obj.mol)
     pmol = psi4obj._init_psi4('symmetry c1', output='./%s_psi4_hyperpolar_%s%i.log' % (psi4obj.name, ax, i))
