@@ -15,11 +15,13 @@ RadonPy is the first open-source Python library for fully automated calculation 
 - matplotlib
 
 ## Installation and usage
-User manual and PyPI, conda packages are currently in preparation.
+User manual and conda packages are currently in preparation.
+
+[PyPI package](https://pypi.org/project/radonpy-pypi/) is available, but Psi4 can not be installed by pip install.
 
 [PDF file](https://github.com/RadonPy/RadonPy/blob/develop/docs/RadonPy_tutorial_20220331.pdf) of RadonPy tutorial is available.
 
-### Instllation for conda:
+### Installation for conda:
 1. Create conda environment
 ```
 conda create -n radonpy python=3.9
@@ -44,9 +46,25 @@ export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 
 4. Installation of RadonPy
 ```
-git clone -b main https://github.com/RadonPy/RadonPy.git
-export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
+pip install radonpy-pypi
 ```
+
+
+### Installation from PyPI
+RadonPy can be also installed by using pip install only. However, this sntallation method can not install Psi4.
+
+- Without LAMMPS installation
+```
+pip install radonpy-pypi
+```
+This is minimal installation of RadonPy. Many functions, such as polymer structure builder, force field assignment, force field descriptor, 
+and tools for polymer informatics, are available, but automated simulations are not available.
+
+- With LAMMPS installation
+```
+pip install radonpy-pypi[lammps]
+```
+MD simulations are available in this installation, but conformation search, cherge calculation, and electronic property calculation are not available.
 
 
 ## Features
@@ -103,14 +121,14 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 - [1070 amorphous polymers](https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv)
 
 ## Publications
-1. [Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater. 8:222 (2022)](https://www.nature.com/articles/s41524-022-00906-4)
+1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater. 8:222 (2022) \[[Link](https://www.nature.com/articles/s41524-022-00906-4)\]
 
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
 ## Related projects
-- [XenonPy (Machine learning tools for materials informatics)](https://github.com/yoshida-lab/XenonPy)
-- [SMiPoly (Polymerization rule-based virtual polymer generator)](https://github.com/PEJpOhno/SMiPoly)
+- XenonPy (Machine learning tools for materials informatics) \[[Link](https://github.com/yoshida-lab/XenonPy)\]
+- SMiPoly (Polymerization rule-based virtual polymer generator) \[[Link](https://github.com/PEJpOhno/SMiPoly)\]
 
 ## Copyright and licence
 ©Copyright 2023 The RadonPy developers, all rights reserved.
