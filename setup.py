@@ -5,7 +5,8 @@ from codecs import open
 from os import path
 import re
 
-package_name = "radonpy"
+package_name = "radonpy-pypi"
+source_root = "radonpy"
 
 root_dir = path.abspath(path.dirname(__file__))
 
@@ -13,7 +14,7 @@ def _requirements():
     return [name.rstrip() for name in open(path.join(root_dir, 'requirements.txt')).readlines()]
 
 
-with open(path.join(root_dir, package_name, '__init__.py')) as f:
+with open(path.join(root_dir, source_root, '__init__.py')) as f:
     init_text = f.read()
     version = re.search(r'__version__\s*=\s*[\'\"](.+?)[\'\"]', init_text).group(1)
     license = re.search(r'__license__\s*=\s*[\'\"](.+?)[\'\"]', init_text).group(1)
@@ -31,10 +32,10 @@ assert url
 setup(
     name=package_name,
     packages=[
-        package_name, package_name+'/core', package_name+'/ff', package_name+'/ff/ff_dat',
-        package_name+'/sim', package_name+'/sim/preset'
+        source_root, source_root+'/core', source_root+'/ff', source_root+'/ff/ff_dat',
+        source_root+'/sim', source_root+'/sim/preset'
     ],
-    package_data={'': [package_name+'/ff/ff_dat/*.json']},
+    package_data={'': [source_root+'/ff/ff_dat/*.json']},
     include_package_data=True,
     install_requires=[
         'numpy',
