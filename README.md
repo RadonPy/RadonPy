@@ -51,20 +51,20 @@ pip install radonpy-pypi
 
 
 ### Installation from PyPI
-RadonPy can be also installed by using pip install only. However, this sntallation method can not install Psi4.
+RadonPy can be also installed by using only pip install. However, this intallation method can not install Psi4.
 
 - Without LAMMPS installation
 ```
 pip install radonpy-pypi
 ```
 This is minimal installation of RadonPy. Many functions, such as polymer structure builder, force field assignment, force field descriptor, 
-and tools for polymer informatics, are available, but automated simulations are not available.
+and tools for polymer informatics, are available, but automated DFT and MD simulations are not available.
 
 - With LAMMPS installation
 ```
 pip install radonpy-pypi[lammps]
 ```
-MD simulations are available in this installation, but conformation search, cherge calculation, and electronic property calculation are not available.
+MD simulations are available in this installation, but DFT calculations (conformation search, cherge calculation, and electronic property calculation) are not available.
 
 
 ## Features
