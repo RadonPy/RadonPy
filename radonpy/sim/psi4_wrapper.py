@@ -153,7 +153,7 @@ class Psi4w():
         # Avoiding the bug that optimization is failed due to the optimization binary file remaining.
         opt_bin_file = os.path.join(self.tmp_dir, 'psi.%i.1' % os.getpid())
         if os.path.isfile(opt_bin_file):
-                os.remove(opt_bin_file)
+            os.remove(opt_bin_file)
 
         os.chdir(self.cwd)
         gc.collect()
