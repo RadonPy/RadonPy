@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, calc, utils
 
-__version__ = '0.2.6'
+__version__ = '0.2.7'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -149,6 +149,12 @@ class Psi4w():
         psi4.core.clean_options()
         if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
             qcengine.config.get_global = self.get_global_org
+
+        # Avoiding the bug that optimization is failed due to the optimization binary file remaining.
+        opt_bin_file = os.path.join(self.tmp_dir, 'psi.%i.1' % os.getpid())
+        if os.path.isfile(opt_bin_file):
+            os.remove(opt_bin_file)
+
         os.chdir(self.cwd)
         gc.collect()
 
