@@ -4,6 +4,7 @@ from setuptools import setup
 from codecs import open
 from os import path
 import re
+from pathlib import Path
 
 package_name = "radonpy-pypi"
 source_root = "radonpy"
@@ -21,6 +22,9 @@ with open(path.join(root_dir, source_root, '__init__.py')) as f:
     author = re.search(r'__author__\s*=\s*[\'\"](.+?)[\'\"]', init_text).group(1)
     author_email = re.search(r'__author_email__\s*=\s*[\'\"](.+?)[\'\"]', init_text).group(1)
     url = re.search(r'__url__\s*=\s*[\'\"](.+?)[\'\"]', init_text).group(1)
+
+this_directory = Path(__file__).parent
+long_description = (this_directory / "README.md").read_text()
 
 assert version
 assert license
@@ -62,6 +66,8 @@ setup(
     author_email=author_email,
     url=url,
     description='RadonPy is a Python library to automate physical property calculations for polymer informatics.',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     keywords='polymer informatics, molecular dynamics',
 
     classifiers=[
