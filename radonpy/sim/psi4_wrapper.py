@@ -357,7 +357,6 @@ class Psi4w():
             geom_iter = int(2*geom_iter)
 
         opt_dict = {
-            'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
