@@ -45,7 +45,6 @@ setup(
         'matplotlib',
         'rdkit>=2020.03',
         'mdtraj>=1.9',
-        'minepy',
     ],
     extras_require={
         'lammps':[
