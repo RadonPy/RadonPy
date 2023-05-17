@@ -249,7 +249,7 @@ class Psi4w():
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
 
-        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
             utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
@@ -351,7 +351,7 @@ class Psi4w():
         energies = np.array([])
         coords = []
 
-        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
             utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
