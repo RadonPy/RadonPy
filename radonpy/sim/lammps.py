@@ -2121,7 +2121,7 @@ class Analyze():
             
             m = line.split()
             if dim == 2:
-                data.append(np.array(m, dtype=np.float))
+                data.append(np.array(m, dtype=np.float64))
 
             elif dim == 3:
                 if row_count == 0:
@@ -2129,10 +2129,10 @@ class Analyze():
                     nrow = int(m[nrow_index])
                     row_count = 1
                 elif row_count < nrow:
-                    data.append([timestep, *np.array(m, dtype=np.float)])
+                    data.append([timestep, *np.array(m, dtype=np.float64)])
                     row_count += 1
                 elif row_count == nrow:
-                    data.append([timestep, *np.array(m, dtype=np.float)])
+                    data.append([timestep, *np.array(m, dtype=np.float64)])
                     row_count = 0
 
         df = pd.DataFrame(data, columns=columns, copy=True)
@@ -2151,7 +2151,7 @@ class Analyze():
 
         rg = []
         for index1 in df.index.unique(level=0):
-            data = df.loc[index1].to_numpy(dtype=np.float)
+            data = df.loc[index1].to_numpy(dtype=np.float64)
             rg.append(data)
 
         rg = np.array(rg)
