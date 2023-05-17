@@ -4,7 +4,7 @@
 RadonPy is the first open-source Python library for fully automated calculation for a comprehensive set of polymer properties, using all-atom classical MD simulations. For a given polymer repeating unit with its chemical structure, the entire process of the MD simulation can be carried out fully automatically, including molecular modelling, equilibrium and non-equilibrium MD simulations, automatic determination of the completion of equilibration, scheduling of restarts in case of failure to converge, and property calculations in the post-process step. In this release, the library comprises the calculation of 15 properties at the amorphous state.
 
 ## Requirement
-- Python 3.7, 3.8, 3.9, 3.10
+- Python 3.7, 3.8, 3.9, 3.10, 3.11
 - LAMMPS >= 3Mar20
 - rdkit >= 2020.03
 - psi4 >= 1.5
