@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, calc, utils
 
-__version__ = '0.2.6'
+__version__ = '0.2.7'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -149,6 +149,12 @@ class Psi4w():
         psi4.core.clean_options()
         if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
             qcengine.config.get_global = self.get_global_org
+
+        # Avoiding the bug that optimization is failed due to the optimization binary file remaining.
+        opt_bin_file = os.path.join(self.tmp_dir, 'psi.%i.1' % os.getpid())
+        if os.path.isfile(opt_bin_file):
+            os.remove(opt_bin_file)
+
         os.chdir(self.cwd)
         gc.collect()
 
@@ -243,7 +249,7 @@ class Psi4w():
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
 
-        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
             utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
@@ -345,13 +351,12 @@ class Psi4w():
         energies = np.array([])
         coords = []
 
-        if dynamic_level == 0 and calc.find_liner_angle(self.mol):
+        if dynamic_level == 0 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
             utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
 
         opt_dict = {
-            'OPT_TYPE': opt_type,
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,

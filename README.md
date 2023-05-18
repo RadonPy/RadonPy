@@ -4,7 +4,7 @@
 RadonPy is the first open-source Python library for fully automated calculation for a comprehensive set of polymer properties, using all-atom classical MD simulations. For a given polymer repeating unit with its chemical structure, the entire process of the MD simulation can be carried out fully automatically, including molecular modelling, equilibrium and non-equilibrium MD simulations, automatic determination of the completion of equilibration, scheduling of restarts in case of failure to converge, and property calculations in the post-process step. In this release, the library comprises the calculation of 15 properties at the amorphous state.
 
 ## Requirement
-- Python 3.7, 3.8, 3.9, 3.10
+- Python 3.7, 3.8, 3.9, 3.10, 3.11
 - LAMMPS >= 3Mar20
 - rdkit >= 2020.03
 - psi4 >= 1.5
@@ -15,11 +15,13 @@ RadonPy is the first open-source Python library for fully automated calculation 
 - matplotlib
 
 ## Installation and usage
-User manual and PyPI, conda packages are currently in preparation.
+User manual and conda packages are currently in preparation.
+
+[PyPI package](https://pypi.org/project/radonpy-pypi/) is available, but Psi4 can not be installed by pip install.
 
 [PDF file](https://github.com/RadonPy/RadonPy/blob/develop/docs/RadonPy_tutorial_20220331.pdf) of RadonPy tutorial is available.
 
-### Instllation for conda:
+### Installation for conda (for Python 3.7, 3.8, 3.9, 3.10):
 1. Create conda environment
 ```
 conda create -n radonpy python=3.9
@@ -44,9 +46,54 @@ export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
 
 4. Installation of RadonPy
 ```
-git clone -b main https://github.com/RadonPy/RadonPy.git
-export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
+pip install radonpy-pypi
 ```
+
+
+### Installation for conda (for Python 3.11):
+1. Create conda environment
+```
+conda create -n radonpy python=3.11
+conda activate radonpy
+```
+
+2. Installation of requirement packages by conda
+```
+conda install -c conda-forge/label/libint_dev -c conda-forge -c psi4 rdkit psi4 resp mdtraj matplotlib
+```
+
+3. Installation of LAMMPS by conda
+```
+conda install -c conda-forge lammps
+```
+
+or manually build from source of [LAMMPS official site](https://www.lammps.org/).
+In this case, the environment variable must be set:
+```
+export LAMMPS_EXEC=<Path-to-LAMMPS-binary>
+```
+
+4. Installation of RadonPy
+```
+pip install radonpy-pypi
+```
+
+
+### Installation from PyPI
+RadonPy can be also installed by using only pip install. However, this intallation method can not install Psi4.
+
+- Without LAMMPS installation
+```
+pip install radonpy-pypi
+```
+This is minimal installation of RadonPy. Many functions, such as polymer structure builder, force field assignment, force field descriptor, 
+and tools for polymer informatics, are available, but automated DFT and MD simulations are not available.
+
+- With LAMMPS installation
+```
+pip install radonpy-pypi[lammps]
+```
+MD simulations are available in this installation, but DFT calculations (conformation search, cherge calculation, and electronic property calculation) are not available.
 
 
 ## Features
@@ -103,14 +150,14 @@ export PYTHONPATH=<Path-to-RadonPy>:$PYTHONPATH
 - [1070 amorphous polymers](https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv)
 
 ## Publications
-1. [Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater. 8:222 (2022)](https://www.nature.com/articles/s41524-022-00906-4)
+1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater. 8:222 (2022) \[[Link](https://www.nature.com/articles/s41524-022-00906-4)\]
 
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
 
 ## Related projects
-- [XenonPy (Machine learning tools for materials informatics)](https://github.com/yoshida-lab/XenonPy)
-- [SMiPoly (Polymerization rule-based virtual polymer generator)](https://github.com/PEJpOhno/SMiPoly)
+- XenonPy (Machine learning tools for materials informatics) \[[Link](https://github.com/yoshida-lab/XenonPy)\]
+- SMiPoly (Polymerization rule-based virtual polymer generator) \[[Link](https://github.com/PEJpOhno/SMiPoly)\]
 
 ## Copyright and licence
 ©Copyright 2023 The RadonPy developers, all rights reserved.

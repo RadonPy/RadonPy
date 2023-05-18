@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.5'
+__version__ = '0.2.7'
 
 mdtraj_avail = True
 try:
@@ -413,9 +413,22 @@ class LAMMPS():
         for i, wf in enumerate(md.wf):
             if wf.type == 'minimize':
                 indata.append('')
+
+                if md.dump_file:
+                    indata.append('undump dump0')
+                if md.xtc_file:
+                    indata.append('undump xtc0')
+
                 indata.append('min_style %s' % (wf.min_style))
                 indata.append('minimize %f %f %i %i' % (wf.etol, wf.ftol, wf.maxiter, wf.maxeval))
                 indata.append('reset_timestep 0')
+
+                if md.dump_file:
+                    indata.append('dump dump0 all custom %i %s %s' % (md.dump_freq, md.dump_file, md.dump_style))
+                if md.xtc_file:
+                    indata.append('dump xtc0 all xtc %i %s' % (md.dump_freq, md.xtc_file))
+                    indata.append('dump_modify xtc0 unwrap yes')
+
                 
             elif wf.type == 'md':
                 unfix = []
@@ -432,12 +445,6 @@ class LAMMPS():
                 if wf.chunk_mol:
                     indata.append('compute cmol%i all chunk/atom molecule nchunk once limit 0 ids once compress no' % (i+1))
                     unfix.append('uncompute cmol%i' % (i+1))
-
-                # Generate "fix deform"
-                if wf.deform:
-                    indata.append('')
-                    indata.append('# deform')
-                    self.make_input_deform(md, wf, i, indata, unfix)
 
                 # Generate "fix efield"
                 if wf.efield:
@@ -483,6 +490,12 @@ class LAMMPS():
                 if wf.shake:
                     indata.append('fix shake%i all shake 1e-4 1000 0 m 1.0' % (i+1))
                     unfix.append('unfix shake%i' % (i+1))
+
+                # Generate "fix deform"
+                if wf.deform:
+                    indata.append('')
+                    indata.append('# deform')
+                    self.make_input_deform(md, wf, i, indata, unfix)
 
                 # Generate anisotropic pressure
                 if wf.ensemble in ['npt', 'nph']:
@@ -2108,7 +2121,7 @@ class Analyze():
             
             m = line.split()
             if dim == 2:
-                data.append(np.array(m, dtype=np.float))
+                data.append(np.array(m, dtype=np.float64))
 
             elif dim == 3:
                 if row_count == 0:
@@ -2116,10 +2129,10 @@ class Analyze():
                     nrow = int(m[nrow_index])
                     row_count = 1
                 elif row_count < nrow:
-                    data.append([timestep, *np.array(m, dtype=np.float)])
+                    data.append([timestep, *np.array(m, dtype=np.float64)])
                     row_count += 1
                 elif row_count == nrow:
-                    data.append([timestep, *np.array(m, dtype=np.float)])
+                    data.append([timestep, *np.array(m, dtype=np.float64)])
                     row_count = 0
 
         df = pd.DataFrame(data, columns=columns, copy=True)
@@ -2138,7 +2151,7 @@ class Analyze():
 
         rg = []
         for index1 in df.index.unique(level=0):
-            data = df.loc[index1].to_numpy(dtype=np.float)
+            data = df.loc[index1].to_numpy(dtype=np.float64)
             rg.append(data)
 
         rg = np.array(rg)
