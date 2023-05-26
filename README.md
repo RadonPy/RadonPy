@@ -157,6 +157,10 @@ MD simulations are available in this installation, but DFT calculations (conform
 - XenonPy (Machine learning tools for materials informatics) \[[Link](https://github.com/yoshida-lab/XenonPy)\]
 - SMiPoly (Polymerization rule-based virtual polymer generator) \[[Link](https://github.com/PEJpOhno/SMiPoly)\]
 
+## Acknowledgements
+The numerical calculations were conducted on the five supercomputer systems, (1) Fugaku at the RIKEN Center for Computational Science, Kobe, Japan, (2) the supercomputer at the Research Center for Computational Science, Okazaki, Japan (Project: 21-IMS-C126, 22-IMS-C125, 23-IMS-C113), (3) the supercomputer Ohtaka at the Supercomputer Center, the Institute for Solid State Physics, the University of Tokyo, Tokyo, Japan, (4) the supercomputer TSUBAME3.0 at the Tokyo Institute of Technology, Tokyo, Japan, and (5) the supercomputer ABCI at the National Institute of Advanced Industrial Science and Technology, Tsukuba, Japan. This software development was supported by the following five grants: (1) a JST CREST (Grant Number: JPMJCR19I3), (2) the MEXT as “Program for Promoting Researches on the Supercomputer Fugaku” (Project ID: hp210264), (3) the Grant-in-Aid for Scientific Research (A) from the Japan Society for the Promotion of Science (Grant Number: 19H01132), (4) the Grant-in-Aid for Scientific Research (C) from the Japan Society for the Promotion of Science (Grant Number: 22K11949), and (5) the HPCI System Research Project (Project ID: hp210213).
+
+
 ## Copyright and licence
 ©Copyright 2023 The RadonPy developers, all rights reserved.
 Released under the `BSD-3 license`.
