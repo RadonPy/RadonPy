@@ -158,7 +158,18 @@ MD simulations are available in this installation, but DFT calculations (conform
 - SMiPoly (Polymerization rule-based virtual polymer generator) \[[Link](https://github.com/PEJpOhno/SMiPoly)\]
 
 ## Acknowledgements
-The numerical calculations were conducted on the five supercomputer systems, (1) Fugaku at the RIKEN Center for Computational Science, Kobe, Japan, (2) the supercomputer at the Research Center for Computational Science, Okazaki, Japan (Project: 21-IMS-C126, 22-IMS-C125, 23-IMS-C113), (3) the supercomputer Ohtaka at the Supercomputer Center, the Institute for Solid State Physics, the University of Tokyo, Tokyo, Japan, (4) the supercomputer TSUBAME3.0 at the Tokyo Institute of Technology, Tokyo, Japan, and (5) the supercomputer ABCI at the National Institute of Advanced Industrial Science and Technology, Tsukuba, Japan. This software development was supported by the following five grants: (1) a JST CREST (Grant Number: JPMJCR19I3), (2) the MEXT as “Program for Promoting Researches on the Supercomputer Fugaku” (Project ID: hp210264), (3) the Grant-in-Aid for Scientific Research (A) from the Japan Society for the Promotion of Science (Grant Number: 19H01132), (4) the Grant-in-Aid for Scientific Research (C) from the Japan Society for the Promotion of Science (Grant Number: 22K11949), and (5) the HPCI System Research Project (Project ID: hp210213).
+The development of RadonPy was financially supported by the following grants
+- Japan Science and Technology Agency (JST) CREST (Grant Number: JPMJCR19I3)
+- Ministry of Education, Culture, Sports, Science and Technology (MEXT) as “Program for Promoting Researches on the Supercomputer Fugaku” (Project ID: hp210264)
+- The Japan Society for the Promotion of Science (JSPS) as the Grant-in-Aid for Scientific Research (A) (Grant Number: 19H01132)
+- JSPS as the Grant-in-Aid for Scientific Research (C) (Grant Number: 22K11949)
+ 
+The numerical calculations were conducted on the following supercomputer systems
+- Fugaku at the RIKEN Center for Computational Science, Kobe, Japan (Project ID: hp210264, hp210213)
+- The supercomputer at the Research Center for Computational Science, Okazaki, Japan (Project ID: 21-IMS-C126, 22-IMS-C125, 23-IMS-C113)
+- The supercomputer Ohtaka at the Supercomputer Center, the Institute for Solid State Physics, the University of Tokyo, Tokyo, Japan
+- The supercomputer TSUBAME3.0 at the Tokyo Institute of Technology, Tokyo, Japan
+- The supercomputer ABCI at the National Institute of Advanced Industrial Science and Technology, Tsukuba, Japan
 
 
 ## Copyright and licence
