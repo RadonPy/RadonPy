@@ -4,7 +4,7 @@
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.3.0b2'
+__version__ = '0.2.1'
 
 import matplotlib
 matplotlib.use('Agg')

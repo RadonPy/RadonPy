@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
-#  Copyright (c) 2023. RadonPy developers. All rights reserved.
+#  Copyright (c) 2022. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.3.0b2'
+__version__ = '0.2.3'
 
 import matplotlib
 matplotlib.use('Agg')
