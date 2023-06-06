@@ -3264,7 +3264,7 @@ def check_tacticity(mol, tacticity, tac_array=None, confId=0):
     return check
 
 
-def polymer_stats(mol, df=False):
+def polymer_stats(mol, df=False, join=False):
     """
     poly.polymer_stats
 
@@ -3281,23 +3281,16 @@ def polymer_stats(mol, df=False):
     """
 
     molcount = utils.count_mols(mol)
-    natom = [0 for i in range(molcount)]
-    molweight = [0.0 for i in range(molcount)]
-
-    for atom in mol.GetAtoms():
-        molid = atom.GetIntProp('mol_id')
-        natom[molid-1] += 1
-        molweight[molid-1] += atom.GetMass()
-
-    natom = np.array(natom)
-    molweight = np.array(molweight)
+    polymer_chains = Chem.GetMolFrags(mol, asMols=True)
+    natom = np.array([chain.GetNumAtoms() for chain in polymer_chains])
+    molweight = np.array([Descriptors.MolWt(chain) for chain in polymer_chains])
 
     poly_stats = {
         'n_mol': molcount,
-        'n_atom': natom if not df else '/'.join([str(n) for n in natom]),
+        'n_atom': natom if not df and not join else '/'.join([str(n) for n in natom]),
         'n_atom_mean': np.mean(natom),
         'n_atom_var': np.var(natom),
-        'mol_weight': molweight if not df else '/'.join([str(n) for n in molweight]),
+        'mol_weight': molweight if not df and not join else '/'.join([str(n) for n in molweight]),
         'Mn': np.mean(molweight),
         'Mw': np.sum(molweight**2)/np.sum(molweight),
         'Mw/Mn': np.sum(molweight**2)/np.sum(molweight)/np.mean(molweight)

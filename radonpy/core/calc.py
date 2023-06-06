@@ -9,6 +9,7 @@
 import numpy as np
 import math
 import socket
+import os
 from math import sqrt, sin, cos
 from copy import deepcopy
 from scipy.stats import maxwell
@@ -23,7 +24,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.3.0b2'
+__version__ = '0.3.0b3'
 
 MD_avail = True
 try:
@@ -165,6 +166,27 @@ def angle_vec_matrix(vec1, vec2, rad=False):
     angle = np.arccos(vcos)
 
     return angle if rad else angle*(180/np.pi)
+
+
+def find_liner_angle(mol, confId=0):
+    coord = mol.GetConformer(confId).GetPositions()
+
+    for p in mol.GetAtoms():
+        b = p.GetIdx()
+
+        for p1 in p.GetNeighbors():
+            a = p1.GetIdx()
+
+            for p2 in p.GetNeighbors():
+                c = p2.GetIdx()
+
+                if a == c:
+                    continue
+
+                ang = angle_coord(coord[a], coord[b], coord[c])
+                if 175 < np.abs(ang) <= 180:
+                    return True
+    return False
 
 
 def dihedral(a, b, c, d, rad=False):
@@ -1010,15 +1032,28 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
             # concurrent.futures
             else:
                 utils.radon_print('Parallel method: concurrent.futures.ProcessPoolExecutor')
-                with confu.ProcessPoolExecutor(max_workers=psi4_mp, mp_context=MP.get_context('spawn')) as executor:
-                    results = executor.map(_conf_search_psi4_worker, args)
+                if psi4_mp == 1:
+                    for i, arg in enumerate(args):
+                        with confu.ProcessPoolExecutor(max_workers=psi4_mp, mp_context=MP.get_context('spawn')) as executor:
+                            results = executor.map(_conf_search_psi4_worker, [arg])
 
-                    for i, res in enumerate(results):
-                        dft_energies.append((res[0], i))
-                        coord = res[1]
-                        for j, atom in enumerate(psi4mol.mol.GetAtoms()):
-                            psi4mol.mol.GetConformer(i).SetAtomPosition(j, Geom.Point3D(coord[j, 0], coord[j, 1], coord[j, 2]))
-                        opt_success += 1 if not res[2] else 0
+                        for res in results:
+                            dft_energies.append((res[0], i))
+                            coord = res[1]
+                            for j, atom in enumerate(psi4mol.mol.GetAtoms()):
+                                psi4mol.mol.GetConformer(i).SetAtomPosition(j, Geom.Point3D(coord[j, 0], coord[j, 1], coord[j, 2]))
+                            opt_success += 1 if not res[2] else 0
+
+                else:
+                    with confu.ProcessPoolExecutor(max_workers=psi4_mp, mp_context=MP.get_context('spawn')) as executor:
+                        results = executor.map(_conf_search_psi4_worker, args)
+
+                        for i, res in enumerate(results):
+                            dft_energies.append((res[0], i))
+                            coord = res[1]
+                            for j, atom in enumerate(psi4mol.mol.GetAtoms()):
+                                psi4mol.mol.GetConformer(i).SetAtomPosition(j, Geom.Point3D(coord[j, 0], coord[j, 1], coord[j, 2]))
+                            opt_success += 1 if not res[2] else 0
 
             utils.restore_picklable(mol_c)
 
@@ -1071,7 +1106,7 @@ def _conf_search_lammps_worker(args):
     mol, confId, solver, solver_path, work_dir, omp, mpi, gpu, c = args
     utils.restore_const(c)
 
-    utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
+    utils.radon_print('Worker process %i start on %s. PID: %i' % (confId, socket.gethostname(), os.getpid()))
 
     utils.restore_picklable(mol)
     mol, energy, coord = md.quick_min(mol, confId=confId, min_style='cg', idx=confId, tmp_clear=True,
@@ -1086,7 +1121,7 @@ def _conf_search_rdkit_worker(args):
     mol, prop, confId, c = args
     utils.restore_const(c)
 
-    utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
+    utils.radon_print('Worker process %i start on %s. PID: %i' % (confId, socket.gethostname(), os.getpid()))
     
     utils.restore_picklable(mol)
     mmff = AllChem.MMFFGetMoleculeForceField(mol, prop, confId=confId)
@@ -1103,7 +1138,7 @@ def _conf_search_psi4_worker(args):
     mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs, c = args
     utils.restore_const(c)
 
-    utils.radon_print('Worker process %i start on %s.' % (confId, socket.gethostname()))
+    utils.radon_print('Worker process %i start on %s. PID: %i' % (confId, socket.gethostname(), os.getpid()))
 
     error_flag = False
     utils.restore_picklable(mol)

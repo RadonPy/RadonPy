@@ -440,7 +440,7 @@ def polarizability_sos(mol, wavelength=None, confId=0, opt=True, work_dir=None, 
         td_method: Using method in the TD-DFT calculation (str, default:wb97m-d3bj)
         td_basis: Using basis set in the TD-DFT calculation (str, default:6-311+G(2d,p))
         td_basis_gen: Using basis set in the TD-DFT calculation for each element
-        n_state: Number of state in TD-DFT calculation
+        n_state: Number of state in the TD-DFT calculation
         p_state: Number of states, which is determined by [Num. of all excitation states] * p_state (float, 0.0 < p_state <= 1.0).
                  p_state is given priority over n_state.
         tda: Run with Tamm-Dancoff approximation (TDA), uses random-phase approximation (RPA) when false (boolean)

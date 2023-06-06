@@ -16,7 +16,7 @@ from rdkit import Geometry as Geom
 from ...core import poly, utils, calc, const
 from .. import lammps, preset
 
-__version__ = '0.2.3'
+__version__ = '0.3.0b3'
 
 
 class NEMD_MP(preset.Preset):
@@ -523,7 +523,7 @@ class NEMD_MP_Analyze(lammps.Analyze):
             density_flag = True
         
         for index1 in df.index.unique(level=0):
-            data = df.loc[index1].to_numpy(dtype=np.float)
+            data = df.loc[index1].to_numpy(dtype=np.float64)
             nchunk = len(data)
             coord = df.loc[index1].iloc[-1]['Coord1']*2-df.loc[index1].iloc[-2]['Coord1']
             Ncount = df.loc[index1].iloc[0]['Ncount']
@@ -674,8 +674,8 @@ class NEMD_MP_Analyze(lammps.Analyze):
 
         if vol is None:
             df_T = self.read_ave(self.tprof_file)
-            nslab = len(df_T.iloc[0].to_numpy(dtype=np.float))
-            vol = self.dfs[-1]['Volume'].to_numpy(dtype=np.float)[-1] * ((nslab/2 - 1)/nslab) * const.ang2m**3
+            nslab = len(df_T.iloc[0].to_numpy(dtype=np.float64))
+            vol = self.dfs[-1]['Volume'].to_numpy(dtype=np.float64)[-1] * ((nslab/2 - 1)/nslab) * const.ang2m**3
 
         conv_J = const.cal2j*1e3/const.NA * const.m2ang * 1e15  # [(kcal/mol) ang / fs] -> [J m/s] = [W m]
 
@@ -1528,7 +1528,7 @@ class NEMD_Langevin_Analyze(lammps.Analyze):
         df = self.read_ave(temp_file)
         
         for index1 in df.index.unique(level=0):
-            data = df.loc[index1].to_numpy(dtype=np.float)
+            data = df.loc[index1].to_numpy(dtype=np.float64)
             nchunk = len(data)
             tgrads.append(data)
         

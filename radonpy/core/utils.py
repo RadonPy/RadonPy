@@ -10,13 +10,14 @@ import os
 import re
 import psutil
 from copy import deepcopy
+from itertools import permutations
 import numpy as np
 import pickle
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from . import const
 
-__version__ = '0.3.0b2'
+__version__ = '0.3.0b3'
 
 
 class Angle():
@@ -177,27 +178,8 @@ def count_mols(mol):
         Number of molecules (int)
     """
 
-    molid = 1
-    molcount = 0
-
-    # Clear mol_id
-    for atom in mol.GetAtoms():
-        atom.SetIntProp('mol_id', 0)
-
-    def recursive_count_mols(atom, molid):
-        for na in atom.GetNeighbors():
-            if na.GetIntProp('mol_id') == 0:
-                na.SetIntProp('mol_id', molid)
-                recursive_count_mols(na, molid)
-
-    for atom in mol.GetAtoms():
-        if atom.GetIntProp('mol_id') == 0:
-            atom.SetIntProp('mol_id', molid)
-            recursive_count_mols(atom, molid)
-            molid += 1
-            molcount += 1
-
-    return molcount
+    fragments = Chem.GetMolFrags(mol, asMols=True)
+    return len(fragments)
 
 
 def remove_atom(mol, idx, angle_fix=False):
