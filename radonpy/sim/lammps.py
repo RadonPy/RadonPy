@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -17,7 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 
-__version__ = '0.2.7'
+__version__ = '0.2.8'
 
 mdtraj_avail = True
 try:
@@ -290,7 +290,7 @@ class LAMMPS():
 
             for l in lines:
                 if 'Large-scale Atomic/Molecular Massively Parallel Simulator' in l:
-                    ver = '%s%s%s' % (str(l.split()[-3]), str(l.split()[-2]), str(l.split()[-1]))
+                    ver = '%s%s%s' % (str(l.split()[6]), str(l.split()[7]), str(l.split()[8]))
         except:
             try:
                 cmd = '%s -h' % self.solver_path
@@ -299,7 +299,7 @@ class LAMMPS():
 
                 for l in lines:
                     if 'Large-scale Atomic/Molecular Massively Parallel Simulator' in l:
-                        ver = '%s%s%s' % (str(l.split()[-3]), str(l.split()[-2]), str(l.split()[-1]))
+                        ver = '%s%s%s' % (str(l.split()[6]), str(l.split()[7]), str(l.split()[8]))
             except:
                 return ver
 
@@ -816,7 +816,7 @@ class LAMMPS():
             ex = wf.efield_x
         if wf.efield_y:
             ey = wf.efield_y
-        if wf.efield_x:
+        if wf.efield_z:
             ez = wf.efield_z
 
         if wf.efield_freq != 0.0:
@@ -836,8 +836,8 @@ class LAMMPS():
     def make_input_dipole(self, md, wf, i, indata, unfix):
         indata.append('compute dipole%i all dipole/chunk cmol%i' % (i+1, i+1))
         indata.append('variable mux equal sum(c_dipole%i[1])' % (i+1))
-        indata.append('variable muy equal sum(c_dipole%i[2])')
-        indata.append('variable muz equal sum(c_dipole%i[3])')
+        indata.append('variable muy equal sum(c_dipole%i[2])' % (i+1))
+        indata.append('variable muz equal sum(c_dipole%i[3])' % (i+1))
         indata.append('variable mu equal sqrt(v_mux^2+v_muy^2+v_muz^2)')
 
         unfix.append('uncompute dipole%i' % (i+1))
