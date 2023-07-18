@@ -1,36 +1,34 @@
 #!/usr/bin/env python3
 
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.2.1'
+__version__ = '0.2.8'
 
 import matplotlib
 matplotlib.use('Agg')
 
 import pandas as pd
 import os
-import platform
-import radonpy
-
-# For Fugaku
-#from radonpy.core import const
-#const.mpi_cmd = 'mpiexec -stdout ./%%n.%%j.out -stderr ./%%n.%%j.err -n %i'
-#const.check_package_disable = True
+import uuid
 
 from radonpy.core import utils, calc, poly
 from radonpy.ff.gaff2_mod import GAFF2_mod
+from radonpy.sim import helper
 from radonpy.sim.preset import eq
 
 
 if __name__ == '__main__':
     data = {
+        'UUID': str(uuid.uuid4()),
         'DBID': os.environ.get('RadonPy_DBID'),
         'monomer_ID': os.environ.get('RadonPy_Monomer_ID', None),
         'ter_ID_1': os.environ.get('RadonPy_TER_ID', 'CH3'),
+        'ter_ID_2': os.environ.get('RadonPy_TER_ID2', None),
         'smiles_list': os.environ.get('RadonPy_SMILES'),
         'monomer_dir': os.environ.get('RadonPy_Monomer_Dir', None),
+        'ter_dir': os.environ.get('RadonPy_Ter_Dir', None),
         'copoly_ratio_list': os.environ.get('RadonPy_Copoly_Ratio', '1'),
         'copoly_type': os.environ.get('RadonPy_Copoly_Type', 'random'),
         'input_natom': int(os.environ.get('RadonPy_NAtom', 1000)),
@@ -41,17 +39,16 @@ if __name__ == '__main__':
         'input_tacticity': os.environ.get('RadonPy_Tacticity', 'atactic'),
         'tacticity': '',
         'remarks': os.environ.get('RadonPy_Remarks', ''),
-        'Python_ver': platform.python_version(),
-        'RadonPy_ver': radonpy.__version__,
+        **helper.get_version(),
         'preset_eq_ver': eq.__version__,
         'check_eq': False,
         'check_tc': False
     }
 
-    omp = int(os.environ.get('RadonPy_OMP', 0))
+    omp = int(os.environ.get('RadonPy_OMP', 1))
     mpi = int(os.environ.get('RadonPy_MPI', utils.cpu_count()))
     gpu = int(os.environ.get('RadonPy_GPU', 0))
-    retry_eq = int(os.environ.get('RadonPy_RetryEQ', 3))
+    retry_eq = int(os.environ.get('RadonPy_RetryEQ', 0))
 
 
     work_dir = './%s' % data['DBID']
@@ -60,52 +57,21 @@ if __name__ == '__main__':
     save_dir = os.path.join(work_dir, 'analyze')
     if not os.path.isdir(save_dir):
         os.makedirs(save_dir)
-    monomer_dir = data['monomer_dir'] if data['monomer_dir'] else None
-    smi_list = data['smiles_list'].split(',')
+    io = helper.IO_Helper(work_dir, save_dir)
+    monomer_dir = data['monomer_dir'].split(',') if data['monomer_dir'] else []
+    ter_dir = data['ter_dir'] if data['ter_dir'] else save_dir
     ratio = [float(x) for x in str(data['copoly_ratio_list']).split(',')]
-    if data['monomer_ID']: monomer_id = data['monomer_ID'].split(',')
 
-    # Load shared monomer_data.csv file
-    if data['monomer_dir'] and data['monomer_ID']:
-        for i, mid in enumerate(monomer_id):
-            monomer_df = pd.read_csv(os.path.join(monomer_dir, 'monomer_%s_data.csv' % mid), index_col=0)
-            monomer_data = monomer_df.iloc[0].to_dict()
-            data['smiles_%i' % (i+1)] = monomer_data.pop('smiles')
-            data['monomer_ID_%i' % (i+1)] = mid
-            data['copoly_ratio_%i' % (i+1)] = ratio[i]
-            for k in monomer_data.keys(): data['%s_monomer%i' % (k, i+1)] = monomer_data[k]
+    # Load monomer_data.csv file
+    data = io.load_monomer_csv(share_dir=monomer_dir, data_dict=data)
 
-    # Load qm_data.csv file
-    elif os.path.isfile(os.path.join(save_dir, 'qm_data.csv')):
-        qm_df = pd.read_csv(os.path.join(save_dir, 'qm_data.csv'), index_col=0)
-        qm_data = qm_df.iloc[0].to_dict()
-        data = {**qm_data, **data}
-        if monomer_dir is None: monomer_dir = save_dir
-    elif os.path.isfile(os.path.join(work_dir, 'qm_data.csv')):
-        qm_df = pd.read_csv(os.path.join(work_dir, 'qm_data.csv'), index_col=0)
-        qm_data = qm_df.iloc[0].to_dict()
-        data = {**qm_data, **data}
-        if monomer_dir is None: monomer_dir = work_dir
-    else:
-        print('ERROR: Cannot find monomer data.')
-
-    # Load monomer pickle file
-    mols = []
-    for i in range(len(smi_list)):
-        if data['monomer_ID']:
-            mol = utils.pickle_load(os.path.join(monomer_dir, 'monomer_%s.pickle' % (monomer_id[i])))
-        else:
-            mol = utils.pickle_load(os.path.join(monomer_dir, 'monomer%i.pickle' % (i+1)))
-        mols.append(mol)
-
-    if data['ter_ID_1']:
-        ter = utils.pickle_load(os.path.join(monomer_dir, 'ter_%s.pickle' % data['ter_ID_1']))
-    else:
-        ter = utils.pickle_load(os.path.join(monomer_dir, 'ter1.pickle'))
+    # Load monomer object file
+    mols = io.load_monomer_obj(share_dir=monomer_dir, data_dict=data)
+    ter, ter2 = io.load_terminal_obj(share_dir=ter_dir, data_dict=data)
 
 
     ff = GAFF2_mod()
-    n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter)
+    n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter, terminal2=ter2)
     data['DP'] = n
 
     # Generate homopolymer chain
@@ -115,13 +81,14 @@ if __name__ == '__main__':
         data['copoly_type'] = ''
         
         homopoly = poly.polymerize_rw(mols[0], n, tacticity=data['input_tacticity'])
-        homopoly = poly.terminate_rw(homopoly, ter)
+        homopoly = poly.terminate_rw(homopoly, ter, ter2)
         data['tacticity'] = poly.get_tacticity(homopoly)
 
         # Force field assignment
         result = ff.ff_assign(homopoly)
         if not result:
             data['remarks'] += '[ERROR: Can not assign force field parameters.]'
+        utils.MolToJSON(homopoly, os.path.join(save_dir, 'polymer.json'))
         utils.pickle_dump(homopoly, os.path.join(save_dir, 'polymer.pickle'))
 
         # Generate amorphous cell
@@ -129,15 +96,17 @@ if __name__ == '__main__':
 
     # Generate random copolymer chain
     elif len(mols) > 1 and data['copoly_type'] == 'random':
+        mp = min([max([1,omp*mpi,omp,mpi]), data['input_nchain'], 60])
         copoly_list = poly.random_copolymerize_rw_mp(mols, n, ratio=ratio, tacticity=data['input_tacticity'],
-                                                     nchain=data['input_nchain'], mp=min([max(1,omp*mpi), data['input_nchain'], 60]))
+                                                     nchain=data['input_nchain'], mp=mp)
         for i in range(data['input_nchain']):
-            copoly_list[i] = poly.terminate_rw(copoly_list[i], ter)
+            copoly_list[i] = poly.terminate_rw(copoly_list[i], ter, ter2)
 
             # Force field assignment
             result = ff.ff_assign(copoly_list[i])
             if not result:
                 data['remarks'] += '[ERROR: Can not assign force field parameters.]'
+            utils.MolToJSON(copoly_list[i], os.path.join(save_dir, 'polymer%i.json' % i))
             utils.pickle_dump(copoly_list[i], os.path.join(save_dir, 'polymer%i.pickle' % i))
 
         data['tacticity'] = poly.get_tacticity(copoly_list[0])
@@ -149,18 +118,19 @@ if __name__ == '__main__':
     elif len(mols) > 1 and data['copoly_type'] == 'alternating':
         ratio = [1/len(mols)]*len(mols)
         data['copoly_ratio_list'] = ','.join([str(x) for x in ratio])
-        n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter)
+        n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter, terminal2=ter2)
         n = round(n/len(mols))
         data['DP'] = n
         
         copoly = poly.copolymerize_rw(mols, n, tacticity=data['input_tacticity'])
-        copoly = poly.terminate_rw(copoly, ter)
+        copoly = poly.terminate_rw(copoly, ter, ter2)
         data['tacticity'] = poly.get_tacticity(copoly)
 
         # Force field assignment
         result = ff.ff_assign(copoly)
         if not result:
             data['remarks'] += '[ERROR: Can not assign force field parameters.]'
+        utils.MolToJSON(copoly, os.path.join(save_dir, 'polymer.json'))
         utils.pickle_dump(copoly, os.path.join(save_dir, 'polymer.pickle'))
         
         # Generate amorphous cell
@@ -171,23 +141,26 @@ if __name__ == '__main__':
         n_list = [round(n*(x/sum(ratio))) for x in ratio]
         
         copoly = poly.block_copolymerize_rw(mols, n_list, tacticity=data['input_tacticity'])
-        copoly = poly.terminate_rw(copoly, ter)
+        copoly = poly.terminate_rw(copoly, ter, ter2)
         data['tacticity'] = poly.get_tacticity(copoly)
 
         # Force field assignment
         result = ff.ff_assign(copoly)
         if not result:
             data['remarks'] += '[ERROR: Can not assign force field parameters.]'
+        utils.MolToJSON(copoly, os.path.join(save_dir, 'polymer.json'))
         utils.pickle_dump(copoly, os.path.join(save_dir, 'polymer.pickle'))
         
         # Generate amorphous cell
         ac = poly.amorphous_cell(copoly, data['input_nchain'], density=data['ini_density'])
-    
+        
+    utils.MolToJSON(ac, os.path.join(save_dir, 'amorphous.json'))
     utils.pickle_dump(ac, os.path.join(save_dir, 'amorphous.pickle'))
 
     # Input data and monomer properties are outputted
-    poly_stats_df = poly.polymer_stats(ac, df=True)
-    data_df = pd.concat([pd.DataFrame(data, index=[0]), poly_stats_df], axis=1).set_index('DBID')
+    poly_stats = poly.polymer_stats(ac, df=False, join=True)
+    data.update(poly_stats)
+    data_df = pd.DataFrame(data, index=[0]).set_index('DBID')
     data_df.to_csv(os.path.join(save_dir, 'input_data.csv'))
 
     # Equilibration MD
@@ -206,22 +179,24 @@ if __name__ == '__main__':
         prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
         result = analy.check_eq()
 
+    # Reload monomer csv data
+    data = io.load_monomer_csv(share_dir=monomer_dir, data_dict=data)
+
     # Calculate refractive index
     polarizability = [data[x] for x in data.keys() if 'qm_polarizability_monomer' in str(x)]
     mol_weight = [data[x] for x in data.keys() if 'mol_weight_monomer' in str(x)]
-    prop_data['refractive_index'] = calc.refractive_index(polarizability, prop_data['density'], mol_weight, ratio=ratio)
+    if len(polarizability) > 0 and len(mol_weight) > 0:
+        prop_data['refractive_index'] = calc.refractive_index(polarizability, prop_data['density'], mol_weight, ratio=ratio)
 
-    data_df.loc[data['DBID'], 'check_eq'] = result
-    data_df.loc[data['DBID'], 'do_TC'] = result
+    data['check_eq'] = result
+    data['do_TC'] = result
     if not result:
-        data_df.loc[data['DBID'], 'remarks'] += '[ERROR: Did not reach an equilibrium state.]'
+        data['remarks'] += '[ERROR: Did not reach an equilibrium state.]'
 
     if prop_data['nematic_order_parameter'] >= 0.1:
-        data_df.loc[data['DBID'], 'remarks'] += '[ERROR: The system is partially oriented.]'
-        data_df.loc[data['DBID'], 'do_TC'] = False
+        data['remarks'] += '[ERROR: The system is partially oriented.]'
+        data['do_TC'] = False
 
     # Data output after equilibration MD
-    eq_data_df = pd.concat([data_df, pd.DataFrame(prop_data, index=[data['DBID']])], axis=1)
-    eq_data_df.index.name = 'DBID'
-    eq_data_df.to_csv(os.path.join(save_dir, 'results.csv'))
+    io.output_md_data({**data, **prop_data})
 
