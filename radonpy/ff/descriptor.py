@@ -85,33 +85,45 @@ class FF_descriptor():
         self.mu = kwargs.get('mu', None)
         self.mu_mass = kwargs.get('mu_mass', None)
         
+
+    def _setup(self):
         # Setting sigma
         if self.s is None:
             if self.polar:
-                self.s = np.array([1/self.nk/np.sqrt(2)]*9)
+                s = np.array([1/self.nk/np.sqrt(2)]*9)
             else:
-                self.s = np.array([1/self.nk/np.sqrt(2)]*8)
+                s = np.array([1/self.nk/np.sqrt(2)]*8)
         elif isinstance(self.s, float):
             if self.polar:
-                self.s = np.array([self.s]*9)
+                s = np.array([self.s]*9)
             else:
-                self.s = np.array([self.s]*8)
+                s = np.array([self.s]*8)
+        else:
+            s = self.s
 
-        # Setting mu_mass
-        if self.mu_mass is None:
-            if self.deuterium:
-                self.mu_mass = self.mass_scale.scale(self.ff_mass_D)
-            else:
-                self.mu_mass = self.mass_scale.scale(self.ff_mass)
+        # Setting sigma_mass
+        s_mass = self.s_mass
 
         # Setting mu
         if self.mu is None:
             if self.polar:
-                self.mu = np.zeros((9, self.nk))
+                mu = np.zeros((9, self.nk))
             else:
-                self.mu = np.zeros((8, self.nk))
-            self.mu[:][:] = np.linspace(0.0, 1.0, self.nk*2+1)[1:-1:2]
+                mu = np.zeros((8, self.nk))
+            mu[:][:] = np.linspace(0.0, 1.0, self.nk*2+1)[1:-1:2]
+        else:
+            mu = self.mu
 
+        # Setting mu_mass
+        if self.mu_mass is None:
+            if self.deuterium:
+                mu_mass = self.mass_scale.scale(self.ff_mass_D)
+            else:
+                mu_mass = self.mass_scale.scale(self.ff_mass)
+        else:
+            mu_mass = self.mu_mass
+
+        return s, s_mass, mu, mu_mass
 
 
     def get_param_list(self, mol, ignoreH=False):
@@ -323,41 +335,26 @@ class FF_descriptor():
 
 
     def ff_kernel_mean(self, mols, ratio=None, nk=None, kernel=None, s=None, s_mass=None, mu=None, mu_mass=None, ignoreH=False):
-
+        setup_flag = False
         if kernel is None:
             kernel = self.Gaussian
 
-        if nk is None:
-            nk = self.nk
+        if type(nk) is int:
+            self.nk = nk
 
-        # Setting sigma
-        if s is None:
-            pass
-        elif isinstance(s, float):
-            if self.polar:
-                self.s = np.array([s]*9)
-            else:
-                self.s = np.array([s]*8)
-        elif isinstance(s, list):
-            self.s = np.array(s)
-        s = self.s
+        if isinstance(s, float) or isinstance(s, list):
+            self.s = s
 
-        # Setting sigma of mass
-        s_mass = self.s_mass
+        if isinstance(s_mass, float) or isinstance(s_mass, list):
+            self.s_mass = s_mass
 
-        # Setting mu
-        if mu is None:
-            pass
-        else:
+        if mu is not None:
             self.mu = mu
-        center = self.mu
 
-        # Setting mu of mass
-        if mu_mass is None:
-            pass
-        else:
+        if mu_mass is not None:
             self.mu_mass = mu_mass
-        center_mass = self.mu_mass
+
+        s, s_mass, mu, mu_mass = self._setup()
 
         if type(mols) is Chem.Mol:
             mols = [mols]
@@ -416,27 +413,27 @@ class FF_descriptor():
 
         # Calculate kernel mean
         if self.polar:
-            mass_km    = self.kernel_mean(mass,    kernel, center_mass, weights=w_atom,  sigma=s_mass)
-            charge_km  = self.kernel_mean(charge,  kernel, center[0],   weights=w_atom,  sigma=s[0])
-            epsilon_km = self.kernel_mean(epsilon, kernel, center[1],   weights=w_atom,  sigma=s[1])
-            sigma_km   = self.kernel_mean(sigma,   kernel, center[2],   weights=w_atom,  sigma=s[2])
-            k_bond_km  = self.kernel_mean(k_bond,  kernel, center[3],   weights=w_bond,  sigma=s[3])
-            r0_km      = self.kernel_mean(r0,      kernel, center[4],   weights=w_bond,  sigma=s[4])
-            polar_km   = self.kernel_mean(polar,   kernel, center[5],   weights=w_bond,  sigma=s[5])
-            k_ang_km   = self.kernel_mean(k_ang,   kernel, center[6],   weights=w_angle, sigma=s[6])
-            theta0_km  = self.kernel_mean(theta0,  kernel, center[7],   weights=w_angle, sigma=s[7])
-            k_dih_km   = self.kernel_mean(k_dih,   kernel, center[8],   weights=w_dih,   sigma=s[8])
+            mass_km    = self.kernel_mean(mass,    kernel, mu_mass, weights=w_atom,  sigma=s_mass)
+            charge_km  = self.kernel_mean(charge,  kernel, mu[0],   weights=w_atom,  sigma=s[0])
+            epsilon_km = self.kernel_mean(epsilon, kernel, mu[1],   weights=w_atom,  sigma=s[1])
+            sigma_km   = self.kernel_mean(sigma,   kernel, mu[2],   weights=w_atom,  sigma=s[2])
+            k_bond_km  = self.kernel_mean(k_bond,  kernel, mu[3],   weights=w_bond,  sigma=s[3])
+            r0_km      = self.kernel_mean(r0,      kernel, mu[4],   weights=w_bond,  sigma=s[4])
+            polar_km   = self.kernel_mean(polar,   kernel, mu[5],   weights=w_bond,  sigma=s[5])
+            k_ang_km   = self.kernel_mean(k_ang,   kernel, mu[6],   weights=w_angle, sigma=s[6])
+            theta0_km  = self.kernel_mean(theta0,  kernel, mu[7],   weights=w_angle, sigma=s[7])
+            k_dih_km   = self.kernel_mean(k_dih,   kernel, mu[8],   weights=w_dih,   sigma=s[8])
             desc = np.hstack([mass_km, charge_km, epsilon_km, sigma_km, k_bond_km, r0_km, polar_km, k_ang_km, theta0_km, k_dih_km])
         else:
-            mass_km    = self.kernel_mean(mass,    kernel, center_mass, weights=w_atom,  sigma=s_mass)
-            charge_km  = self.kernel_mean(charge,  kernel, center[0],   weights=w_atom,  sigma=s[0])
-            epsilon_km = self.kernel_mean(epsilon, kernel, center[1],   weights=w_atom,  sigma=s[1])
-            sigma_km   = self.kernel_mean(sigma,   kernel, center[2],   weights=w_atom,  sigma=s[2])
-            k_bond_km  = self.kernel_mean(k_bond,  kernel, center[3],   weights=w_bond,  sigma=s[3])
-            r0_km      = self.kernel_mean(r0,      kernel, center[4],   weights=w_bond,  sigma=s[4])
-            k_ang_km   = self.kernel_mean(k_ang,   kernel, center[5],   weights=w_angle, sigma=s[5])
-            theta0_km  = self.kernel_mean(theta0,  kernel, center[6],   weights=w_angle, sigma=s[6])
-            k_dih_km   = self.kernel_mean(k_dih,   kernel, center[7],   weights=w_dih,   sigma=s[7])
+            mass_km    = self.kernel_mean(mass,    kernel, mu_mass, weights=w_atom,  sigma=s_mass)
+            charge_km  = self.kernel_mean(charge,  kernel, mu[0],   weights=w_atom,  sigma=s[0])
+            epsilon_km = self.kernel_mean(epsilon, kernel, mu[1],   weights=w_atom,  sigma=s[1])
+            sigma_km   = self.kernel_mean(sigma,   kernel, mu[2],   weights=w_atom,  sigma=s[2])
+            k_bond_km  = self.kernel_mean(k_bond,  kernel, mu[3],   weights=w_bond,  sigma=s[3])
+            r0_km      = self.kernel_mean(r0,      kernel, mu[4],   weights=w_bond,  sigma=s[4])
+            k_ang_km   = self.kernel_mean(k_ang,   kernel, mu[5],   weights=w_angle, sigma=s[5])
+            theta0_km  = self.kernel_mean(theta0,  kernel, mu[6],   weights=w_angle, sigma=s[6])
+            k_dih_km   = self.kernel_mean(k_dih,   kernel, mu[7],   weights=w_dih,   sigma=s[7])
             desc = np.hstack([mass_km, charge_km, epsilon_km, sigma_km, k_bond_km, r0_km, k_ang_km, theta0_km, k_dih_km])
 
         return desc

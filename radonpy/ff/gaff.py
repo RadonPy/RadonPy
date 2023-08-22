@@ -13,7 +13,7 @@ from itertools import permutations
 from rdkit import Chem
 from ..core import calc, utils
 
-__version__ = '0.3.0b1'
+__version__ = '0.3.0b3'
 
 
 class GAFF():
@@ -1211,6 +1211,7 @@ class GAFF():
         pass
 
 
+    ## Backward compatibility
     class Angle_ff():
         """
             GAFF.Angle_ff() object
@@ -1220,6 +1221,14 @@ class GAFF():
             self.k = k
             self.theta0 = theta0
             self.theta0_rad = theta0*(np.pi/180)
+
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': float(self.k),
+                'theta0': float(self.theta0),
+            }
+            return dic
         
         
     class Dihedral_ff():
@@ -1234,6 +1243,16 @@ class GAFF():
             self.m = m
             self.n = np.array(n)
         
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': [float(x) for x in self.k],
+                'd0': [float(x) for x in self.d0],
+                'm': int(self.m),
+                'n': [int(x) for x in self.n],
+            }
+            return dic
+
         
     class Improper_ff():
         """
@@ -1245,4 +1264,12 @@ class GAFF():
             self.d0 = d0
             self.n = n
         
-        
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': float(self.k),
+                'd0': float(self.d0),
+                'n': int(self.n),
+            }
+            return dic
+
