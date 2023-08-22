@@ -15,10 +15,11 @@ import datetime
 import multiprocessing as MP
 import concurrent.futures as confu
 from rdkit import Chem
-from rdkit.Chem import AllChem
+from rdkit.Chem import AllChem, Descriptors
 from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
+from ..ff.gaff2_mod import GAFF2_mod
 
 __version__ = '0.3.0b3'
 
@@ -126,7 +127,8 @@ def connect_mols(mol1, mol2, bond_length=1.5, dihedral=np.pi, random_rot=False, 
 
     # Set atomic charge
     for charge in charge_list:
-        if not mol.GetAtomWithIdx(0).HasProp(charge): continue
+        if not mol.GetAtomWithIdx(0).HasProp(charge) or not mol.GetAtomWithIdx(mol.GetNumAtoms()-1).HasProp(charge):
+            continue
         head_charge = mol.GetAtomWithIdx(mol2.GetIntProp('head_idx') + mol1_n).GetDoubleProp(charge)
         head_ne_charge = mol.GetAtomWithIdx(mol2.GetIntProp('head_ne_idx') + mol1_n).GetDoubleProp(charge)
         tail_charge = mol.GetAtomWithIdx(mol1.GetIntProp('tail_idx')).GetDoubleProp(charge)
@@ -444,7 +446,7 @@ def terminate_mols(poly, mol1, mol2=None, confId=0, bond_length=1.5, dihedral=np
     res_name_2 = 'TU1'
         
     if Chem.MolToSmiles(mol1_c) == '[H][3H]' or Chem.MolToSmiles(mol1_c) == '[3H][H]':
-        poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).SetIsotope(1)
+        poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).SetIsotope(0)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).GetPDBResidueInfo().SetResidueName(res_name_1)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).GetPDBResidueInfo().SetResidueNumber(1+poly_c.GetIntProp('num_units'))
         poly_c.SetIntProp('num_units', 1+poly_c.GetIntProp('num_units'))
@@ -453,7 +455,7 @@ def terminate_mols(poly, mol1, mol2=None, confId=0, bond_length=1.5, dihedral=np
                             res_name_1=res_name_1)
 
     if Chem.MolToSmiles(mol2_c) == '[H][3H]' or Chem.MolToSmiles(mol2_c) == '[3H][H]':
-        poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).SetIsotope(1)
+        poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).SetIsotope(0)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).GetPDBResidueInfo().SetResidueName(res_name_2)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).GetPDBResidueInfo().SetResidueNumber(1+poly_c.GetIntProp('num_units'))
         poly_c.SetIntProp('num_units', 1+poly_c.GetIntProp('num_units'))
@@ -470,8 +472,8 @@ def terminate_mols(poly, mol1, mol2=None, confId=0, bond_length=1.5, dihedral=np
 # Polymer chain generator with self-avoiding random walk
 ##########################################################
 def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None, headhead=False, confId=0,
-            dist_min=0.7, retry=200, rollback=5, retry_step=1000, retry_opt_step=0, tacticity=None,
-            res_name_init='INI', res_name=None, label=None, label_init=1, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, tacticity=None,
+            res_name_init='INI', res_name=None, label=None, label_init=1, ff=None, work_dir=None, omp=1, mpi=0, gpu=0, mp_idx=None):
     """
     poly.random_walk_polymerization
 
@@ -492,9 +494,6 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
         rollback: Number of rollback step when retry random_walk_polymerization (int)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
         work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
@@ -557,11 +556,6 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
     for i in tqdm(range(start_num, len(m_idx)), desc='[Polymerization]', disable=const.tqdm_disable):
         dmat = None
     
-        if type(poly) is Chem.Mol:
-            poly_copy.append(utils.deepcopy_mol(poly))
-        if len(poly_copy) > rollback:
-            del poly_copy[0]
-
         if chi_inv[i]:
             mol_c = mols_inv[m_idx[i]]
         else:
@@ -572,9 +566,22 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
         else:
             res_name_1 = res_name[m_idx[i-1]]
 
-        for r in range(retry_step+retry_opt_step):
+        if type(poly) is Chem.Mol:
+            poly_copy.append(utils.deepcopy_mol(poly))
+        else:
+            poly_copy.append(utils.deepcopy_mol(mol_c))
+
+        if len(poly_copy) > rollback:
+            del poly_copy[0]
+
+        for r in range(retry_step*(1+retry_opt_step)):
             check_3d = False
-            label1 = label[m_idx[i-1]][1] if i > 0 else 1
+            if i > 0:
+                label1 = label[m_idx[i-1]][1]
+            elif type(init_poly) == Chem.Mol:
+                label1 = label_init
+            else:
+                label1 = 1
 
             if headhead and i % 2 == 0:
                 poly = connect_mols(poly, mol_c, tailtail=True, random_rot=True, set_linker=True,
@@ -592,11 +599,18 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
                 # This deepcopy avoids a bug of RDKit
                 dmat = Chem.GetDistanceMatrix(utils.deepcopy_mol(poly))
 
-            if r >= retry_step:
-                if opt == 'lammps' and MD_avail:
-                    ff.ff_assign(poly)
-                    poly, _ = md.quick_rw(poly, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
-                elif opt == 'rdkit':
+            if r % retry_step == 0 and r > 0:
+                if MD_avail:
+                    utils.radon_print('Molecular geometry shaking by a short time and high temperature MD simulation')
+                    if ff is None:
+                        ff = GAFF2_mod()
+                    if poly.GetAtomWithIdx(0).HasProp('AtomicCharge') and poly.GetAtomWithIdx(poly.GetNumAtoms()-1).HasProp('AtomicCharge'):
+                        ff.ff_assign(poly)
+                    else:
+                        ff.ff_assign(poly, charge='gasteiger')
+                    poly, _ = md.quick_rw(poly, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, idx=mp_idx)
+                else:
+                    utils.radon_print('Molecular geometry optimization by RDKit')
                     AllChem.MMFFOptimizeMolecule(poly, maxIters=50, mmffVariant='MMFF94s', nonBondedThresh=3.0, confId=0)
                 check_3d = check_3d_structure_poly(poly, mol_c, dmat, dist_min=dist_min, check_bond_length=True, tacticity=tacticity)
                 tri_coord = None
@@ -613,12 +627,10 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
                     tri_coord = tri_coord_new
                     bond_coord = bond_coord_new
                 break
-            elif r < retry_step + retry_opt_step - 1:
+            elif r < retry_step * (1 + retry_opt_step) - 1:
                 poly = utils.deepcopy_mol(poly_copy[-1]) if type(poly_copy[-1]) is Chem.Mol else None
                 if r == 0 or (r+1) % 100 == 0:
-                    utils.radon_print('Retry random walk step %i, %i/%i' % (i+1, r+1, retry_step))
-                if r == retry_step - 1:
-                    utils.radon_print('Switch to algorithm with optimization.', level=1)
+                    utils.radon_print('Retry random walk step %i, %i/%i' % (i+1, r+1, retry_step*(1+retry_opt_step)))
             else:
                 retry_flag = True
                 utils.radon_print(
@@ -638,20 +650,33 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
                 level=1)
             retry -= 1
             start_num = i-len(poly_copy)+1
-            label_init = label[m_idx[start_num-1]][1]
+            if start_num > 0:
+                label_init = label[m_idx[start_num-1]][1]
+            rb_poly = poly_copy[0]
+
+            if MD_avail and rollback_shaking and type(rb_poly) is Chem.Mol:
+                utils.radon_print('Molecular geometry shaking by a short time and high temperature MD simulation')
+                if ff is None:
+                    ff = GAFF2_mod()
+                if rb_poly.GetAtomWithIdx(0).HasProp('AtomicCharge') and poly.GetAtomWithIdx(poly.GetNumAtoms()-1).HasProp('AtomicCharge'):
+                    ff.ff_assign(rb_poly)
+                else:
+                    ff.ff_assign(rb_poly, charge='gasteiger')
+                rb_poly, _ = md.quick_rw(rb_poly, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+
             poly = random_walk_polymerization(
-                mols, m_idx, chi_inv, start_num=start_num, init_poly=poly_copy[0], headhead=headhead, confId=confId,
+                mols, m_idx, chi_inv, start_num=start_num, init_poly=rb_poly, headhead=headhead, confId=confId,
                 dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step, tacticity=tacticity,
                 res_name_init=res_name_init, res_name=res_name, label=label, label_init=label_init,
-                opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+                ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
             )
             
     return poly
 
 
 def polymerize_rw(mol, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=200, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name='RU0', opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name='RU0', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None):
     """
     poly.polymerize_rw
 
@@ -672,9 +697,6 @@ def polymerize_rw(mol, n, init_poly=None, headhead=False, confId=0, tacticity='a
         rollback: Number of rollback step when retry polymerize_rw (int)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
         work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
@@ -710,8 +732,8 @@ def polymerize_rw(mol, n, init_poly=None, headhead=False, confId=0, tacticity='a
 
     poly = random_walk_polymerization(
         mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId,
-        dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
-        tacticity=tacticity, res_name=res_name, label=label, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+        dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        tacticity=tacticity, res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx
     )
 
     if type(ter1) is Chem.Mol:
@@ -723,19 +745,19 @@ def polymerize_rw(mol, n, init_poly=None, headhead=False, confId=0, tacticity='a
 
 
 def polymerize_rw_old(mol, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=10, rollback=5, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name='RU0', opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=10, rollback=5, rollback_shaking=False, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name='RU0', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
     # Backward campatibility
-    return polymerize_rw(mol, n, init_poly=init_poly, headhead=headhead, confId=confId, tacticity=tacticity, atac_ratio=atac_ratio,
-            dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2,
-            label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name, opt=opt, ff=ff,
+    return polymerize_rw(mol, n, init_poly=init_poly, headhead=headhead, confId=confId, tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, 
+            retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2,
+            label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name, ff=ff,
             work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
 
 
 def polymerize_rw_mp(mol, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=100, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
             label=None, label_ter1=1, label_ter2=1, res_name='RU0',
-            opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
+            ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
 
     utils.picklable(mol)
     if type(ter1) is Chem.Mol:
@@ -748,8 +770,8 @@ def polymerize_rw_mp(mol, n, init_poly=None, headhead=False, confId=0, tacticity
     np = max([nchain, mp])
 
     c = utils.picklable_const()
-    args = [(mol, n, init_poly, headhead, confId, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-            ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) for i in range(np)]
+    args = [(mol, n, init_poly, headhead, confId, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+            ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) for mp_idx in range(np)]
 
     polys = polymerize_mp_exec(_polymerize_rw_mp_worker, args, mp, nchain=nchain, fail_copy=fail_copy)
 
@@ -757,16 +779,16 @@ def polymerize_rw_mp(mol, n, init_poly=None, headhead=False, confId=0, tacticity
 
 
 def _polymerize_rw_mp_worker(args):
-    (mol, n, init_poly, headhead, confId, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-        ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) = args
+    (mol, n, init_poly, headhead, confId, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+        ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) = args
     utils.restore_const(c)
 
     try:
         poly = polymerize_rw(mol, n, init_poly=init_poly, headhead=headhead, confId=confId,
-                    tacticity=tacticity, atac_ratio=atac_ratio,
-                    dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
+                    tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, 
+                    retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
                     ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name,
-                    opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+                    ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx)
         utils.picklable(poly)
     except BaseException as e:
         utils.radon_print('%s' % e)
@@ -776,8 +798,8 @@ def _polymerize_rw_mp_worker(args):
 
 
 def copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=200, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None):
     """
     poly.copolymerize_rw
 
@@ -798,9 +820,6 @@ def copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tacticity
         rollback: Number of rollback step when retry polymerize_rw (int)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
         work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
@@ -833,9 +852,9 @@ def copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tacticity
             label = [*label, [label_ter1, label_ter1], [label_ter2, label_ter2]]
 
     poly = random_walk_polymerization(
-        mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId,
-        dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
-        tacticity=tacticity, res_name=res_name, label=label, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+        mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId, dist_min=dist_min,
+        retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        tacticity=tacticity, res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx
     )
 
     if type(ter1) is Chem.Mol:
@@ -847,19 +866,19 @@ def copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tacticity
 
 
 def copolymerize_rw_old(mols, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=10, rollback=5, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=10, rollback=5, rollback_shaking=False, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
     # Backward campatibility
-    return copolymerize_rw(mols, n, init_poly=init_poly, headhead=headhead, confId=confId, tacticity=tacticity, atac_ratio=atac_ratio,
-            dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2,
-            label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name, opt=opt, ff=ff,
+    return copolymerize_rw(mols, n, init_poly=init_poly, headhead=headhead, confId=confId, tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, 
+            retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2,
+            label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name, ff=ff,
             work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
 
 
 def copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=100, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
             label=None, label_ter1=1, label_ter2=1, res_name=None, 
-            opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
+            ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
 
     for i in range(len(mols)):
         utils.picklable(mols[i])
@@ -875,8 +894,8 @@ def copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_ratio=
     np = max([nchain, mp])
 
     c = utils.picklable_const()
-    args = [(mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-            ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) for i in range(np)]
+    args = [(mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+            ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) for mp_idx in range(np)]
 
     polys = polymerize_mp_exec(_copolymerize_rw_mp_worker, args, mp, nchain=nchain, fail_copy=fail_copy)
 
@@ -884,15 +903,15 @@ def copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_ratio=
 
 
 def _copolymerize_rw_mp_worker(args):
-    (mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-        ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) = args
+    (mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+        ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) = args
     utils.restore_const(c)
 
     try:
-        poly = copolymerize_rw(mols, n, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio,
-                    dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        poly = copolymerize_rw(mols, n, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, 
+                    retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
                     ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name,
-                    opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+                    ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx)
         utils.picklable(poly)
     except BaseException as e:
         utils.radon_print('%s' % e)
@@ -902,8 +921,8 @@ def _copolymerize_rw_mp_worker(args):
 
 
 def random_copolymerize_rw(mols, n, ratio=None, reac_ratio=[], init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=200, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None):
     """
     poly.random_copolymerize_rw
 
@@ -926,10 +945,7 @@ def random_copolymerize_rw(mols, n, ratio=None, reac_ratio=[], init_poly=None, h
         rollback: Number of rollback step when retry polymerize_rw (int)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
-        work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
+        work_dir: Work directory path of LAMMPS (str)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
         mpi: Number of MPI process in LAMMPS (int)
@@ -967,9 +983,9 @@ def random_copolymerize_rw(mols, n, ratio=None, reac_ratio=[], init_poly=None, h
             label = [*label, [label_ter1, label_ter1], [label_ter2, label_ter2]]
 
     poly = random_walk_polymerization(
-        mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId,
-        dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
-        tacticity=tacticity, res_name=res_name, label=label, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+        mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId, dist_min=dist_min,
+        retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        tacticity=tacticity, res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx
     )
 
     if type(ter1) is Chem.Mol:
@@ -981,19 +997,19 @@ def random_copolymerize_rw(mols, n, ratio=None, reac_ratio=[], init_poly=None, h
 
 
 def random_copolymerize_rw_old(mols, n, ratio=None, reac_ratio=[], init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=10, rollback=5, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=10, rollback=5, rollback_shaking=False, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
     # Backward campatibility
     return random_copolymerize_rw(mols, n, ratio=ratio, reac_ratio=reac_ratio, init_poly=init_poly, headhead=headhead, confId=confId,
-            tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step,
-            retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2,
-            res_name=res_name, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+            tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking,
+            retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2,
+            res_name=res_name, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
 
 
 def random_copolymerize_rw_mp(mols, n, ratio=None, reac_ratio=[], init_poly=None, tacticity='atactic', atac_ratio=0.5,
-                dist_min=0.7, retry=100, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
+                dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
                 label=None, label_ter1=1, label_ter2=1, res_name=None,
-                opt='rdkit', ff=None, work_dir=None, omp=1, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
+                ff=None, work_dir=None, omp=1, mpi=1, gpu=0, nchain=1, mp=None, fail_copy=True):
 
     for i in range(len(mols)):
         utils.picklable(mols[i])
@@ -1009,8 +1025,8 @@ def random_copolymerize_rw_mp(mols, n, ratio=None, reac_ratio=[], init_poly=None
     np = max([nchain, mp])
 
     c = utils.picklable_const()
-    args = [(mols, n, ratio, reac_ratio, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-            ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) for i in range(np)]
+    args = [(mols, n, ratio, reac_ratio, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+            ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) for mp_idx in range(np)]
 
     polys = polymerize_mp_exec(_random_copolymerize_rw_mp_worker, args, mp, nchain=nchain, fail_copy=fail_copy)
 
@@ -1018,15 +1034,15 @@ def random_copolymerize_rw_mp(mols, n, ratio=None, reac_ratio=[], init_poly=None
 
 
 def _random_copolymerize_rw_mp_worker(args):
-    (mols, n, ratio, reac_ratio, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-        ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) = args
+    (mols, n, ratio, reac_ratio, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+        ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) = args
     utils.restore_const(c)
 
     try:
         poly = random_copolymerize_rw(mols, n, ratio=ratio, reac_ratio=reac_ratio, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio,
-                    dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
+                    dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
                     ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name,
-                    opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+                    ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx)
         utils.picklable(poly)
     except BaseException as e:
         utils.radon_print('%s' % e)
@@ -1036,8 +1052,8 @@ def _random_copolymerize_rw_mp_worker(args):
 
 
 def block_copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=200, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None):
     """
     poly.block_copolymerize_rw
 
@@ -1058,10 +1074,7 @@ def block_copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tac
         rollback: Number of rollback step when retry polymerize_rw (int)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
-        work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
+        work_dir: Work directory path of LAMMPS (str)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
         mpi: Number of MPI process in LAMMPS (int)
@@ -1097,8 +1110,8 @@ def block_copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tac
 
     poly = random_walk_polymerization(
         mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId,
-        dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
-        tacticity=tacticity, res_name=res_name, label=label, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+        dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        tacticity=tacticity, res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx
     )
 
     if type(ter1) is Chem.Mol:
@@ -1110,19 +1123,19 @@ def block_copolymerize_rw(mols, n, init_poly=None, headhead=False, confId=0, tac
 
 
 def block_copolymerize_rw_old(mols, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=10, rollback=5, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+            dist_min=0.7, retry=10, rollback=5, rollback_shaking=False, retry_step=0, retry_opt_step=50, ter1=None, ter2=None,
+            label=None, label_ter1=1, label_ter2=1, res_name=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
     # Backward campatibility
     return block_copolymerize_rw(mols, n, init_poly=init_poly, headhead=headhead, confId=confId,
-            tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step,
-            retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2,
-            res_name=res_name, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+            tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking,
+            retry_step=retry_step, retry_opt_step=retry_opt_step, ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2,
+            res_name=res_name, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
 
 
 def block_copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_ratio=0.5,
-            dist_min=0.7, retry=100, rollback=5, retry_step=1000, retry_opt_step=0, ter1=None, ter2=None,
+            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
             label=None, label_ter1=1, label_ter2=1, res_name=None, 
-            opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=10, mp=10, fail_copy=True):
+            ff=None, work_dir=None, omp=0, mpi=1, gpu=0, nchain=10, mp=10, fail_copy=True):
 
     for i in range(len(mols)):
         utils.picklable(mols[i])
@@ -1138,8 +1151,8 @@ def block_copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_
     np = max([nchain, mp])
 
     c = utils.picklable_const()
-    args = [(mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-            ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) for i in range(np)]
+    args = [(mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+            ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) for mp_idx in range(np)]
 
     polys = polymerize_mp_exec(_block_copolymerize_rw_mp_worker, args, mp, nchain=nchain, fail_copy=fail_copy)
 
@@ -1147,15 +1160,15 @@ def block_copolymerize_rw_mp(mols, n, init_poly=None, tacticity='atactic', atac_
 
 
 def _block_copolymerize_rw_mp_worker(args):
-    (mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, retry_step, retry_opt_step,
-        ter1, ter2, label, label_ter1, label_ter2, res_name, opt, ff, work_dir, omp, mpi, gpu, c) = args
+    (mols, n, init_poly, tacticity, atac_ratio, dist_min, retry, rollback, rollback_shaking, retry_step, retry_opt_step,
+        ter1, ter2, label, label_ter1, label_ter2, res_name, ff, work_dir, omp, mpi, gpu, mp_idx, c) = args
     utils.restore_const(c)
 
     try:
-        poly = block_copolymerize_rw(mols, n, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio,
-                    dist_min=dist_min, retry=retry, rollback=rollback, retry_step=retry_step, retry_opt_step=retry_opt_step,
+        poly = block_copolymerize_rw(mols, n, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio, dist_min=dist_min, 
+                    retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
                     ter1=ter1, ter2=ter2, label=label, label_ter1=label_ter1, label_ter2=label_ter2, res_name=res_name,
-                    opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
+                    ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx)
         utils.picklable(poly)
     except BaseException as e:
         utils.radon_print('%s' % e)
@@ -1207,8 +1220,8 @@ def polymerize_mp_exec(func, args, mp, nchain=1, fail_copy=True):
     return polys
 
 
-def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry_step=1000, retry_opt_step=0,
-            res_name='RU0', label=None, opt='rdkit', ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
+def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry=100, rollback_shaking=False, retry_step=200, retry_opt_step=0,
+            res_name='RU0', label=None, ff=None, work_dir=None, omp=0, mpi=1, gpu=0):
     """
     poly.terminate_rw
 
@@ -1224,9 +1237,6 @@ def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry_step=1000,
         dist_min: (float, angstrom)
         retry_step: Number of retry for a random-walk step when generating unsuitable structure (int)
         retry_opt_step: Number of retry for a random-walk step with optimization when generating unsuitable structure (int)
-        opt:
-            lammps: Using short time MD of lammps
-            rdkit: MMFF94 optimization by RDKit
         work_dir: Work directory path of LAMMPS (str, requiring when opt is LAMMPS)
         ff: Force field object (requiring when opt is LAMMPS)
         omp: Number of threads of OpenMP in LAMMPS (int)
@@ -1248,13 +1258,13 @@ def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry_step=1000,
     poly_c = utils.deepcopy_mol(poly)
 
     if Chem.MolToSmiles(mol1) == '[H][3H]' or Chem.MolToSmiles(mol1) == '[3H][H]':
-        poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).SetIsotope(1)
+        poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).SetIsotope(0)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).GetPDBResidueInfo().SetResidueName(res_name_1)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('head_idx')).GetPDBResidueInfo().SetResidueNumber(1+poly_c.GetIntProp('num_units'))
         poly_c.SetIntProp('num_units', 1+poly_c.GetIntProp('num_units'))
         H2_flag1 = True
     if Chem.MolToSmiles(mol2) == '[H][3H]' or Chem.MolToSmiles(mol2) == '[3H][H]':
-        poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).SetIsotope(1)
+        poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).SetIsotope(0)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).GetPDBResidueInfo().SetResidueName(res_name_2)
         poly_c.GetAtomWithIdx(poly_c.GetIntProp('tail_idx')).GetPDBResidueInfo().SetResidueNumber(1+poly_c.GetIntProp('num_units'))
         poly_c.SetIntProp('num_units', 1+poly_c.GetIntProp('num_units'))
@@ -1278,8 +1288,8 @@ def terminate_rw(poly, mol1, mol2=None, confId=0, dist_min=1.0, retry_step=1000,
     if not H2_flag1 or not H2_flag2:
         poly_c = random_walk_polymerization(
             mols, mon_idx, chi_inv, confId=confId,
-            dist_min=dist_min, retry=0, retry_step=retry_step, retry_opt_step=retry_opt_step,
-            res_name=res_name, label=label, opt=opt, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
+            dist_min=dist_min, retry=retry, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
+            res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu
         )
 
     set_terminal_idx(poly_c)
@@ -1780,7 +1790,7 @@ def nematic_mixture_cell(mols, n, cell=None, density=0.1, retry=20, retry_step=1
 
 # DEPRECATION
 def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, density=0.1,
-                    ff=None, opt='rdkit', retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
+                    ff=None, retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
     """
     poly.polymerize_cell
 
@@ -1798,9 +1808,6 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
         cell: Initial structure of unit cell (RDkit Mol object)
         density: (float, g/cm3)
         ff: Force field object (requiring when use_lammps is True)
-        opt:
-            True: Using short time MD of lammps
-            False: Dihedral angle around connecting bond is rotated randomly
         retry: Number of retry when generating unsuitable structure (int)
         dist_min: Threshold of intra-molecular atom-atom distance(float, angstrom)
         threshold: Threshold of inter-molecular atom-atom distance (float, angstrom)
@@ -1841,10 +1848,10 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
             for r in range(retry):
                 cell = connect_mols(cell, mol, random_rot=True)
 
-                if opt == 'lammps' and MD_avail:
+                if MD_avail:
                     ff.ff_assign(cell)
                     cell, _ = md.quick_rw(cell, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
-                elif opt == 'rdkit':
+                else:
                     AllChem.MMFFOptimizeMolecule(cell, maxIters=50, confId=0)
 
                 cell_coord = np.array(cell.GetConformer(0).GetPositions())
@@ -1873,7 +1880,7 @@ def polymerize_cell(mol, n, m, terminate=None, terminate2=None, cell=None, densi
 
 # DEPRECATION
 def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, density=0.1,
-                    ff=None, opt='rdkit', retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
+                    ff=None, retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
     """
     poly.copolymerize_cell
 
@@ -1891,9 +1898,6 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
         cell: Initial structure of unit cell (RDkit Mol object)
         density: (float, g/cm3)
         ff: Force field object (requiring when use_lammps is True)
-        opt:
-            True: Using short time MD of lammps
-            False: Dihedral angle around connecting bond is rotated randomly
         retry: Number of retry when generating unsuitable structure (int)
         dist_min: Threshold of intra-molecular atom-atom distance(float, angstrom)
         threshold: Threshold of inter-molecular atom-atom distance (float, angstrom)
@@ -1936,10 +1940,10 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
                 for r in range(retry):
                     cell = connect_mols(cell, mol, random_rot=True)
 
-                    if opt == 'lammps' and MD_avail:
+                    if MD_avail:
                         ff.ff_assign(cell)
                         cell, _ = md.quick_rw(cell, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
-                    elif opt == 'rdkit':
+                    else:
                         AllChem.MMFFOptimizeMolecule(cell, maxIters=50, confId=0)
 
                     cell_coord = np.array(cell.GetConformer(0).GetPositions())
@@ -1968,7 +1972,7 @@ def copolymerize_cell(mols, n, m, terminate=None, terminate2=None, cell=None, de
 
 # DEPRECATION
 def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None, cell=None, density=0.1,
-                    ff=None, opt='rdkit', retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
+                    ff=None, retry=50, dist_min=0.7, threshold=2.0, work_dir=None, omp=1, mpi=1, gpu=0):
     """
     poly.random_copolymerize_cell
 
@@ -1987,9 +1991,6 @@ def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None,
         cell: Initial structure of unit cell (RDkit Mol object)
         density: (float, g/cm3)
         ff: Force field object (requiring when use_lammps is True)
-        opt:
-            True: Using short time MD of lammps
-            False: Dihedral angle around connecting bond is rotated randomly
         retry: Number of retry when generating unsuitable structure (int)
         dist_min: Threshold of intra-molecular atom-atom distance(float, angstrom)
         threshold: Threshold of inter-molecular atom-atom distance (float, angstrom)
@@ -2040,10 +2041,10 @@ def random_copolymerize_cell(mols, n, ratio, m, terminate=None, terminate2=None,
             for r in range(retry):
                 cell = connect_mols(cell, mol, random_rot=True)
 
-                if opt == 'lammps' and MD_avail:
+                if MD_avail:
                     ff.ff_assign(cell)
                     cell, _ = md.quick_rw(cell, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu)
-                elif opt == 'rdkit':
+                else:
                     AllChem.MMFFOptimizeMolecule(cell, maxIters=50, confId=0)
 
                 cell_coord = np.array(cell.GetConformer(0).GetPositions())
@@ -2882,7 +2883,7 @@ def check_3d_structure_cell(cell, mol_coord, dist_min=2.0):
 ##########################################################
 # Utility functions for calculate polymerization degree 
 ##########################################################
-def calc_n_from_num_atoms(mols, natom, ratio=[1.0], terminal1=None, terminal2=None):
+def calc_n_from_num_atoms(mols, natom, ratio=[1.0], label=1, terminal1=None, terminal2=None):
     """
     poly.calc_n_from_num_atoms
 
@@ -2914,7 +2915,7 @@ def calc_n_from_num_atoms(mols, natom, ratio=[1.0], terminal1=None, terminal2=No
 
     mol_n = 0.0
     for i, mol in enumerate(mols):
-        new_mol = remove_linker_atoms(mol)
+        new_mol = remove_linker_atoms(mol, label=label)
         mol_n += new_mol.GetNumAtoms() * ratio[i]
     
     if terminal1 is not None:
@@ -3014,30 +3015,30 @@ def set_linker_flag(mol, reverse=False, label=1):
         if (atom.GetSymbol() == "H" and atom.GetIsotope() == label+2) or atom.GetSymbol() == "*":
             atom.SetBoolProp('linker', True)
             if not flag:
-                mol.SetIntProp('head_idx', atom.GetIdx())
-                mol.SetIntProp('tail_idx', atom.GetIdx())
+                mol_head_idx = atom.GetIdx()
+                mol_tail_idx = atom.GetIdx()
                 flag = True
             else:
                 if reverse:
-                    mol.SetIntProp('head_idx', atom.GetIdx())
+                    mol_head_idx = atom.GetIdx()
                 else:
-                    mol.SetIntProp('tail_idx', atom.GetIdx())
+                    mol_tail_idx = atom.GetIdx()
 
     if not flag: return False
 
-    mol_head_idx = mol.GetIntProp('head_idx')
+    mol.SetIntProp('head_idx', mol_head_idx)
     mol.GetAtomWithIdx(mol_head_idx).SetBoolProp('head', True)
 
-    mol_tail_idx = mol.GetIntProp('tail_idx')
+    mol.SetIntProp('tail_idx', mol_tail_idx)
     mol.GetAtomWithIdx(mol_tail_idx).SetBoolProp('tail', True)
 
-    head_ne_idx = mol.GetAtomWithIdx(mol_head_idx).GetNeighbors()[0].GetIdx()
-    mol.SetIntProp('head_ne_idx', head_ne_idx)
-    mol.GetAtomWithIdx(head_ne_idx).SetBoolProp('head_neighbor', True)
+    head_ne_atom = mol.GetAtomWithIdx(mol_head_idx).GetNeighbors()[0]
+    mol.SetIntProp('head_ne_idx', head_ne_atom.GetIdx())
+    head_ne_atom.SetBoolProp('head_neighbor', True)
 
-    tail_ne_idx = mol.GetAtomWithIdx(mol_tail_idx).GetNeighbors()[0].GetIdx()
-    mol.SetIntProp('tail_ne_idx', tail_ne_idx)
-    mol.GetAtomWithIdx(tail_ne_idx).SetBoolProp('tail_neighbor', True)
+    tail_ne_atom = mol.GetAtomWithIdx(mol_tail_idx).GetNeighbors()[0]
+    mol.SetIntProp('tail_ne_idx', tail_ne_atom.GetIdx())
+    tail_ne_atom.SetBoolProp('tail_neighbor', True)
 
     return True
 

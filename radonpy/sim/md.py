@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .lammps import LAMMPS, Analyze
 from ..core import calc, utils
 
-__version__ = '0.3.0b2'
+__version__ = '0.3.0b3'
 
 
 class MD():
@@ -347,6 +347,8 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
 
+    md.dump_file = None
+    md.rst = False
     etol = kwargs.get('etol', 1.0e-4)
     ftol = kwargs.get('ftol', 1.0e-6)
     maxiter = kwargs.get('maxiter', 10000)
@@ -405,6 +407,8 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
             md.pbc = False
             calc.centering_mol(mol_copy, confId=i)
 
+        md.dump_file = None
+        md.rst = False
         etol = kwargs.get('etol', 1.0e-4)
         ftol = kwargs.get('ftol', 1.0e-6)
         maxiter = kwargs.get('maxiter', 10000)
@@ -455,12 +459,13 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
     return mol_copy, energies, uwstr_list
 
 
-def quick_rw(mol, confId=0, step=1000, time_step=0.2, limit=0.1, shake=False, idx=None, tmp_clear=False,
+def quick_rw(mol, confId=0, step=100, time_step=0.2, temp=700, limit=0.1, shake=False, idx=None, tmp_clear=False,
             solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
     """
     MD.quick_rw
 
-    Geometry optimization by MD solver for random walk process
+    Geometry shaking by MD solver for random walk process
+    (Short time NVT, high temperature, no coulomb interaction)
 
     Args:
         mol: RDKit Mol object
@@ -487,10 +492,21 @@ def quick_rw(mol, confId=0, step=1000, time_step=0.2, limit=0.1, shake=False, id
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
 
-    md.dielectric = kwargs.get('dielectric', 1.0)
+    #md.dielectric = kwargs.get('dielectric', 1.0)
+
+    md.pair_style = 'lj/cut'
+    md.pair_style_nonpbc = 'lj/cut'
+    md.cutoff_in = 3.0
+    md.cutoff_out = ''
+    md.kspace_style = 'none'
+    md.kspace_style_accuracy = ''
+    md.dump_file = None
+    md.rst = False
+    md.set_init_velocity = temp
+    md.add.append('comm_modify cutoff 8.0')
     md.add_min(min_style='cg')
-    md.add_md('nve', step, time_step=time_step, shake=shake, nve_limit=limit, **kwargs)
-    #md.add_min(min_style='fire')
+    #md.add_md('nve', step, time_step=time_step, shake=shake, limit=limit, **kwargs)
+    md.add_md('nvt', step, time_step=time_step, shake=shake, t_start=temp, t_stop=temp, **kwargs)
 
     sol.make_dat(mol_copy, confId=confId, file_name=md.dat_file, velocity=False)
     sol.make_input(md)

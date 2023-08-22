@@ -13,9 +13,11 @@ from copy import deepcopy
 from itertools import permutations
 import numpy as np
 import pickle
+import json
 from rdkit import Chem
 from rdkit.Chem import AllChem
 from . import const
+from ..ff import ff_class
 
 __version__ = '0.3.0b3'
 
@@ -30,7 +32,16 @@ class Angle():
         self.c = c
         self.ff = ff
     
-    
+    def to_dict(self):
+        dic = {
+            'a': int(self.a),
+            'b': int(self.b),
+            'c': int(self.c),
+            'ff': self.ff.to_dict()
+        }
+        return dic
+
+
 class Dihedral():
     """
         utils.Dihedral() object
@@ -41,8 +52,18 @@ class Dihedral():
         self.c = c
         self.d = d
         self.ff = ff
-    
-    
+
+    def to_dict(self):
+        dic = {
+            'a': int(self.a),
+            'b': int(self.b),
+            'c': int(self.c),
+            'd': int(self.d),
+            'ff': self.ff.to_dict()
+        }
+        return dic
+
+
 class Improper():
     """
         utils.Improper() object
@@ -54,41 +75,16 @@ class Improper():
         self.d = d
         self.ff = ff
 
+    def to_dict(self):
+        dic = {
+            'a': int(self.a),
+            'b': int(self.b),
+            'c': int(self.c),
+            'd': int(self.d),
+            'ff': self.ff.to_dict()
+        }
+        return dic
 
-class Angle_ff():
-    """
-        utils.Angle_ff() object
-    """
-    def __init__(self, ff_type=None, k=None, theta0=None):
-        self.type = ff_type
-        self.k = k
-        self.theta0 = theta0
-        self.theta0_rad = theta0*(np.pi/180)
-    
-    
-class Dihedral_ff():
-    """
-        utils.Dihedral_ff() object
-    """
-    def __init__(self, ff_type=None, k=[], d0=[], m=None, n=[]):
-        self.type = ff_type
-        self.k = np.array(k)
-        self.d0 = np.array(d0)
-        self.d0_rad = np.array(d0)*(np.pi/180)
-        self.m = m
-        self.n = np.array(n)
-    
-    
-class Improper_ff():
-    """
-        utils.Improper_ff() object
-    """
-    def __init__(self, ff_type=None, k=None, d0=-1, n=None):
-        self.type = ff_type
-        self.k = k
-        self.d0 = d0
-        self.n = n
-    
         
 class Cell():
     def __init__(self, xhi, xlo, yhi, ylo, zhi, zlo):
@@ -102,6 +98,17 @@ class Cell():
         self.dy = yhi-ylo
         self.dz = zhi-zlo
         self.volume = self.dx * self.dy * self.dz
+
+    def to_dict(self):
+        dic = {
+            'xhi': float(self.xhi),
+            'xlo': float(self.xlo),
+            'yhi': float(self.yhi),
+            'ylo': float(self.ylo),
+            'zhi': float(self.zhi),
+            'zlo': float(self.zlo),
+        }
+        return dic
 
 
 class RadonPyError(Exception):
@@ -698,6 +705,319 @@ def MolToExXYZFile(mol, filename, confId=0):
     return True
 
 
+def MolToJSON(mol, file, useRDKitExtensions=False):
+    json_dict = MolToJSON_dict(mol, useRDKitExtensions=useRDKitExtensions)
+    with open(file, mode='w') as f:
+        json.dump(json_dict, f, indent=2)
+
+
+def MolToJSON_dict(mol, useRDKitExtensions=False):
+    Chem.SanitizeMol(mol)
+    if hasattr(Chem.rdMolInterchange, 'JSONWriteParameters'):
+        params = Chem.rdMolInterchange.JSONWriteParameters()
+        params.useRDKitExtensions = useRDKitExtensions
+        json_str = Chem.rdMolInterchange.MolToJSON(mol, params=params)
+    else:
+        json_str = Chem.rdMolInterchange.MolToJSON(mol)
+    json_dict = json.loads(json_str)
+    
+    radonpy_ext = {
+        'name': 'radonpy_extention',
+        "formatVersion": 1,
+        'lib_version': __version__,
+    }
+
+    atom_prop = []
+    for a in mol.GetAtoms():
+        atom_data = {}
+        # FF on atoms
+        if a.HasProp('ff_type'):
+            atom_data['ff_type'] = a.GetProp('ff_type')
+        if a.HasProp('ff_epsilon'):
+            atom_data['ff_epsilon'] = a.GetDoubleProp('ff_epsilon')
+        if a.HasProp('ff_sigma'):
+            atom_data['ff_sigma'] = a.GetDoubleProp('ff_sigma')
+
+        # charge
+        if a.HasProp('AtomicCharge'):
+            atom_data['AtomicCharge'] = a.GetDoubleProp('AtomicCharge')
+        if a.HasProp('RESP'):
+            atom_data['RESP'] = a.GetDoubleProp('RESP')
+        if a.HasProp('ESP'):
+            atom_data['ESP'] = a.GetDoubleProp('ESP')
+        if a.HasProp('Mulliken'):
+            atom_data['Mulliken'] = a.GetDoubleProp('Mulliken')
+        if a.HasProp('Lowdin'):
+            atom_data['Lowdin'] = a.GetDoubleProp('Lowdin')
+        if a.HasProp('_GasteigerCharge'):
+            atom_data['_GasteigerCharge'] = a.GetProp('_GasteigerCharge')
+    
+        # velocity
+        if a.HasProp('vx'):
+            atom_data['vx'] = a.GetDoubleProp('vx')
+            atom_data['vy'] = a.GetDoubleProp('vy')
+            atom_data['vz'] = a.GetDoubleProp('vz')
+
+        # others
+        atom_data['isotope'] = a.GetIsotope()
+        if a.HasProp('mol_id'):
+            atom_data['mol_id'] = a.GetIntProp('mol_id')
+
+        # PDB
+        resinfo = a.GetPDBResidueInfo()
+        if resinfo is not None:
+            atom_data['ResidueName'] = resinfo.GetResidueName()
+            atom_data['ResidueNumber'] = resinfo.GetResidueNumber()
+
+        atom_prop.append(atom_data)
+    radonpy_ext['atoms'] = atom_prop
+
+
+    bond_prop = []
+    for b in mol.GetBonds():
+        bond_data = {}
+        # FF on bonds
+        if b.HasProp('ff_type'):
+            bond_data['ff_type'] = b.GetProp('ff_type')
+        if b.HasProp('ff_k'):
+            bond_data['ff_k'] = b.GetDoubleProp('ff_k')
+        if b.HasProp('ff_r0'):
+            bond_data['ff_r0'] = b.GetDoubleProp('ff_r0')
+
+        bond_prop.append(bond_data)
+    radonpy_ext['bonds'] = bond_prop
+
+ 
+    # angle
+    if hasattr(mol, 'angles'):
+        # if len(mol.angles) > 0 and hasattr(mol.angles[list(mol.angles.keys())[0]], 'to_dict'):
+            angle_prop = [ang.to_dict() for key, ang in mol.angles.items()]
+            radonpy_ext['angles'] = angle_prop
+        # else:
+        #     angle_prop = []
+        #     for key, ang in mol.angles.items():
+        #         dic = {
+        #             'a': ang.a,
+        #             'b': ang.b,
+        #             'c': ang.c,
+        #             'ff': {
+        #                 'ff_type': ang.ff.type,
+        #                 'k': ang.ff.k,
+        #                 'theta0': ang.ff.theta0,
+        #             }
+        #         }
+        #         angle_prop.append(dic)
+    else:
+        angle_prop = []
+    
+    # dihedral
+    if hasattr(mol, 'dihedrals'):
+        # if len(mol.dihedrals) > 0 and hasattr(mol.dihedrals[list(mol.dihedrals.keys())[0]], 'to_dict'):
+            dihedral_prop = [dih.to_dict() for key, dih in mol.dihedrals.items()]
+            radonpy_ext['dihedrals'] = dihedral_prop
+        # else:
+        #     dihedral_prop = []
+        #     for key, dih in mol.dihedrals.items():
+        #         dic = {
+        #             'a': dih.a,
+        #             'b': dih.b,
+        #             'c': dih.c,
+        #             'd': dih.d,
+        #             'ff': {
+        #                 'ff_type': dih.ff.type,
+        #                 'k': dih.ff.k,
+        #                 'd0': dih.ff.d0,
+        #                 'm': dih.ff.m,
+        #                 'n': dih.ff.n,
+        #             }
+        #         }
+        #         dihedral_prop.append(dic)
+    else:
+        dihedral_prop = []
+
+    # improper
+    if hasattr(mol, 'impropers'):
+        # if len(mol.impropers) > 0 and hasattr(mol.impropers[list(mol.impropers.keys())[0]], 'to_dict'):
+            improper_prop = [imp.to_dict() for key, imp in mol.impropers.items()]
+            radonpy_ext['impropers'] = improper_prop
+        # else:
+        #     improper_prop = []
+        #     for key, imp in mol.impropers.items():
+        #         dic = {
+        #             'a': imp.a,
+        #             'b': imp.b,
+        #             'c': imp.c,
+        #             'd': imp.d,
+        #             'ff': {
+        #                 'ff_type': imp.ff.type,
+        #                 'k': imp.ff.k,
+        #                 'd0': imp.ff.d0,
+        #                 'n': imp.ff.n,
+        #             }
+        #         }
+        #         improper_prop.append(dic)
+    else:
+        improper_prop = []
+
+    # cell
+    if hasattr(mol, 'cell'):
+        # if hasattr(mol.cell, 'to_dict'):
+            cell_prop = mol.cell.to_dict()
+            radonpy_ext['cell'] = cell_prop
+        # else:
+        #     cell_prop = {
+        #         'xhi': mol.cell.xhi,
+        #         'xlo': mol.cell.xlo,
+        #         'yhi': mol.cell.yhi,
+        #         'ylo': mol.cell.ylo,
+        #         'zhi': mol.cell.zhi,
+        #         'zlo': mol.cell.zlo,
+        #     }
+
+    json_dict['molecules'][0]['extensions'].append(radonpy_ext)
+
+    return json_dict
+
+
+def JSONToMol(file):
+    with open(file, mode='r') as f:
+        json_dict = json.load(f)
+
+    radonpy_ext = None
+    for ext in json_dict['molecules'][0]['extensions']:
+        if 'name' in ext and ext['name'] == 'radonpy_extention':
+            radonpy_ext = ext
+    if radonpy_ext is None:
+        radon_print('RadonPy extention data was not found in JSON file.', level=3)
+
+    mol = Chem.rdMolInterchange.JSONToMols(json.dumps(json_dict))[0]
+    Chem.SanitizeMol(mol)
+
+    for i, a in enumerate(mol.GetAtoms()):
+        atom_data = radonpy_ext['atoms'][i]
+
+        # FF on atoms
+        if 'ff_type' in atom_data:
+            a.SetProp('ff_type', str(atom_data['ff_type']))
+        if 'ff_epsilon' in atom_data:
+            a.SetDoubleProp('ff_epsilon', float(atom_data['ff_epsilon']))
+        if 'ff_sigma' in atom_data:
+            a.SetDoubleProp('ff_sigma', float(atom_data['ff_sigma']))
+
+        # charge
+        if 'AtomicCharge' in atom_data:
+            a.SetDoubleProp('AtomicCharge', float(atom_data['AtomicCharge']))
+        if 'RESP' in atom_data:
+            a.SetDoubleProp('RESP', float(atom_data['RESP']))
+        if 'ESP' in atom_data:
+            a.SetDoubleProp('ESP', float(atom_data['ESP']))
+        if 'Mulliken' in atom_data:
+            a.SetDoubleProp('Mulliken', float(atom_data['Mulliken']))
+        if 'Lowdin' in atom_data:
+            a.SetDoubleProp('Lowdin', float(atom_data['Lowdin']))
+        if '_GasteigerCharge' in atom_data:
+            a.SetProp('_GasteigerCharge', str(atom_data['_GasteigerCharge']))
+    
+        # velocity
+        if 'vx' in atom_data:
+            a.SetDoubleProp('vx', float(atom_data['vx']))
+            a.SetDoubleProp('vy', float(atom_data['vy']))
+            a.SetDoubleProp('vz', float(atom_data['vz']))
+
+        # others
+        a.SetIsotope(int(atom_data['isotope']))
+        if 'mol_id' in atom_data:
+            a.SetIntProp('mol_id', int(atom_data['mol_id']))
+
+        # PDB
+        atom_name = str(atom_data['ff_type']) if 'ff_type' in atom_data else a.GetSymbol()
+        if 'ResidueName' in atom_data and 'ResidueNumber' in atom_data:
+            a.SetMonomerInfo(
+                Chem.AtomPDBResidueInfo(
+                    atom_name,
+                    residueName=atom_data['ResidueName'],
+                    residueNumber=atom_data['ResidueNumber'],
+                    isHeteroAtom=False
+                )
+            )
+
+
+    for i, b in enumerate(mol.GetBonds()):
+        bond_data = radonpy_ext['bonds'][i]
+
+        # FF on bonds
+        if 'ff_type' in bond_data:
+            b.SetProp('ff_type', str(bond_data['ff_type']))
+        if 'ff_k' in bond_data:
+            b.SetDoubleProp('ff_k', float(bond_data['ff_k']))
+        if 'ff_r0' in bond_data:
+            b.SetDoubleProp('ff_r0', float(bond_data['ff_r0']))
+
+
+    if 'angles' in radonpy_ext:
+        if hasattr(mol, 'angle_style') and mol.angle_style == 'harmonic':
+            angle_class = ff_class.GAFF_Angle
+        else:
+            angle_class = ff_class.GAFF_Angle
+
+        angle_prop = {}
+        for ang in radonpy_ext['angles']:
+            key = '%i,%i,%i' % (int(ang['a']), int(ang['b']), int(ang['c']))
+            angle_prop[key] = Angle(
+                a = int(ang['a']),
+                b = int(ang['b']),
+                c = int(ang['c']),
+                ff = angle_class(**ang['ff'])
+            )
+        setattr(mol, 'angles', angle_prop)
+
+
+    if 'dihedrals' in radonpy_ext:
+        if hasattr(mol, 'dihedral_style') and mol.dihedral_style == 'fourier':
+            dihedral_class = ff_class.GAFF_Dihedral
+        else:
+            dihedral_class = ff_class.GAFF_Dihedral
+
+        dihedral_prop = {}
+        for dih in radonpy_ext['dihedrals']:
+            key = '%i,%i,%i,%i' % (int(dih['a']), int(dih['b']), int(dih['c']), int(dih['d']))
+            dihedral_prop[key] = Dihedral(
+                a = int(dih['a']),
+                b = int(dih['b']),
+                c = int(dih['c']),
+                d = int(dih['d']),
+                ff = dihedral_class(**dih['ff'])
+            )
+        setattr(mol, 'dihedrals', dihedral_prop)
+
+
+    if 'impropers' in radonpy_ext:
+        if hasattr(mol, 'improper_style') and mol.improper_style == 'cvff':
+            improper_class = ff_class.GAFF_Improper
+        else:
+            improper_class = ff_class.GAFF_Improper
+
+        improper_prop = {}
+        for imp in radonpy_ext['impropers']:
+            key = '%i,%i,%i,%i' % (int(imp['a']), int(imp['b']), int(imp['c']), int(imp['d']))
+            improper_prop[key] = Improper(
+                a = int(imp['a']),
+                b = int(imp['b']),
+                c = int(imp['c']),
+                d = int(imp['d']),
+                ff = improper_class(**imp['ff'])
+            )
+        setattr(mol, 'impropers', improper_prop)
+
+
+    # cell
+    if 'cell' in radonpy_ext and 'xhi' in radonpy_ext['cell']:
+        cell_prop = Cell(**radonpy_ext['cell'])
+        setattr(mol, 'cell', cell_prop)
+
+    return mol
+
+
 def picklable(mol=None):
     Chem.SetDefaultPickleProperties(Chem.PropertyPickleOptions.AllProps)
     return mol
@@ -720,7 +1040,7 @@ def pickle_load(path):
         with open(path, mode='rb') as f:
             mol = pickle.load(f)
     except BaseException as e:
-        utils.radon_print('%s' % e, level=2)
+        radon_print('%s' % e, level=2)
         return None
 
     # Backward campatibility from version 0.2 to 0.3

@@ -328,7 +328,7 @@ def mirror_inversion_mol(mol, confId=0):
 def molecular_weight(mol, ignore_linker=True):
     mol_weight = 0.0
     for atom in mol.GetAtoms():
-        if ignore_linker and atom.GetSymbol() == "H" and atom.GetIsotope() == 3:
+        if ignore_linker and atom.GetSymbol() == "H" and atom.GetIsotope() >= 3:
             pass
         else:
             mol_weight += atom.GetMass()
