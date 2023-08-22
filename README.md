@@ -139,7 +139,7 @@ MD simulations are available in this installation, but DFT calculations (conform
 - Easy installation
     - Only using open-source software
 - Tools for polymer informatics
-	- Force field descriptor
+	- Force field descriptor ([How to use](https://github.com/RadonPy/RadonPy/blob/develop/docs/FF-Descriptor_man.pdf))
 	- Generator of macrocyclic oligomer for descriptor construction of polymers
 	- Full and substruct match function for polymer SMILES
 	- Extractor of mainchain in a polymer backbone
