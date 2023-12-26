@@ -19,7 +19,7 @@ from ..core import utils
 from . import lammps
 from .preset import eq
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 def get_version():
@@ -472,19 +472,7 @@ class IO_Helper():
             share_dir = [share_dir]
         share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
 
-        if os.path.isfile(os.path.join(self.save_dir, 'qm_data.csv')):
-            qm_df = pd.read_csv(os.path.join(self.save_dir, 'qm_data.csv'), index_col=0)
-            qm_data = qm_df.iloc[0].to_dict()
-            data_dict = {**qm_data, **data_dict}
-            data_dict['monomer_dir'] = self.save_dir
-
-        elif os.path.isfile(os.path.join(self.work_dir, 'qm_data.csv')):
-            qm_df = pd.read_csv(os.path.join(self.work_dir, 'qm_data.csv'), index_col=0)
-            qm_data = qm_df.iloc[0].to_dict()
-            data_dict = {**qm_data, **data_dict}
-            data_dict['monomer_dir'] = self.work_dir
-
-        elif len(share_dir) > 0 and data_dict.get('monomer_ID'):
+        if len(share_dir) > 0 and data_dict.get('monomer_ID'):
             monomer_id = data_dict['monomer_ID'].split(',')
             monomer_dir = []
             if data_dict.get('copoly_ratio_list'):
@@ -512,6 +500,19 @@ class IO_Helper():
                 data_dict['copoly_ratio_%i' % (i+1)] = ratio[i]
                 for k in monomer_data.keys():
                     data_dict['%s_monomer%i' % (k, i+1)] = monomer_data[k]
+
+        elif os.path.isfile(os.path.join(self.save_dir, 'qm_data.csv')):
+            qm_df = pd.read_csv(os.path.join(self.save_dir, 'qm_data.csv'), index_col=0)
+            qm_data = qm_df.iloc[0].to_dict()
+            data_dict = {**qm_data, **data_dict}
+            data_dict['monomer_dir'] = self.save_dir
+
+        elif os.path.isfile(os.path.join(self.work_dir, 'qm_data.csv')):
+            qm_df = pd.read_csv(os.path.join(self.work_dir, 'qm_data.csv'), index_col=0)
+            qm_data = qm_df.iloc[0].to_dict()
+            data_dict = {**qm_data, **data_dict}
+            data_dict['monomer_dir'] = self.work_dir
+
         else:
             raise Exception('ERROR: Cannot find monomer data.')
 
@@ -540,7 +541,7 @@ class IO_Helper():
                         break
 
                 if mol is None:
-                    raise Exception('ERROR: Cannot find monomer pickle file of %s.' % mid)
+                    raise Exception('ERROR: Cannot find monomer object file of %s.' % monomer_id[i])
 
                 mols.append(mol)
 
@@ -560,7 +561,7 @@ class IO_Helper():
                         break
 
                 if mol is None:
-                    raise Exception('ERROR: Cannot find monomer pickle file of %s.' % mid)
+                    raise Exception('ERROR: Cannot find monomer object file of monomer%i.' % (i+1))
 
                 mols.append(mol)
 
@@ -587,7 +588,7 @@ class IO_Helper():
                     break
 
             if ter1 is None:
-                raise Exception('ERROR: Cannot find monomer pickle file of %s.' % mid)
+                raise Exception('ERROR: Cannot find monomer object file of ter_%s.' % data_dict['ter_ID_1'])
 
         else:
             for d in share_dir:
@@ -602,7 +603,7 @@ class IO_Helper():
                     break
 
             if ter1 is None:
-                raise Exception('ERROR: Cannot find monomer pickle file of %s.' % mid)
+                raise Exception('ERROR: Cannot find monomer object file of ter1.')
 
         if data_dict.get('ter_ID_2'):
             for d in share_dir:
@@ -617,7 +618,7 @@ class IO_Helper():
                     break
 
             if ter2 is None:
-                raise Exception('ERROR: Cannot find monomer pickle file of %s.' % mid)
+                raise Exception('ERROR: Cannot find monomer object file of ter_%s.' % data_dict['ter_ID_2'])
 
         else:
             for d in share_dir:
@@ -632,6 +633,43 @@ class IO_Helper():
                     break
 
         return ter1, ter2
+
+
+    def exist_monomer_csv(self, monomer_id, share_dir=[]):
+        exi = False
+
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        for d in share_dir:
+            monomer_path = os.path.join(d, 'monomer_%s_data.csv' % monomer_id)
+            if os.path.isfile(monomer_path):
+                exi = True
+                break
+                
+        return exi
+
+
+    def exist_monomer_obj(self, monomer_id, share_dir=[]):
+        exi = False
+
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        for d in share_dir:
+            json_path = os.path.join(d, 'monomer_%s.json' % (monomer_id))
+            if os.path.isfile(json_path):
+                exi = True
+                break
+
+            pickle_path = os.path.join(d, 'monomer_%s.pickle' % (monomer_id))
+            if os.path.isfile(pickle_path):
+                exi = True
+                break
+
+        return exi
 
 
     def load_md_csv(self, data_dict):

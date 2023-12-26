@@ -16,8 +16,9 @@ from matplotlib import pyplot as pp
 from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
+from ..ff import ff_class
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 mdtraj_avail = True
 try:
@@ -2594,7 +2595,10 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     p_coeff = []
     i = 0
     for atom in mol.GetAtoms():
-        ptype = '%s,%i' % (atom.GetProp('ff_type'), atom.GetIsotope())
+        if atom.GetSymbol() == 'H' and atom.GetIsotope() == 3:
+            ptype = '%s,0' % atom.GetProp('ff_type')
+        else:
+            ptype = '%s,%i' % (atom.GetProp('ff_type'), atom.GetIsotope())
         if ptype in unique_ptype:
             atom.SetIntProp('ff_type_num', unique_ptype.index(ptype)+1)
         else:
@@ -3183,14 +3187,14 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
 
     if 'angles' in n_data.keys():
         for i in range(n_data['angles']):
-            angle_ff_tmp = utils.Angle_ff(ff_type=angle_id[i], k=k_angle[angle_id[i]-1], theta0=theta0[angle_id[i]-1])
+            angle_ff_tmp = ff_class.GAFF_Angle(ff_type=angle_id[i], k=k_angle[angle_id[i]-1], theta0=theta0[angle_id[i]-1])
             utils.add_angle(mol, angle_atom[i][0]-1, angle_atom[i][1]-1, angle_atom[i][2]-1, ff=angle_ff_tmp)
     else:
         setattr(mol, 'angles', [])
 
     if 'dihedrals' in n_data.keys():
         for i in range(n_data['dihedrals']):
-            dihed_ff_tmp = utils.Dihedral_ff(ff_type=dihed_id[i], k=k_dih[dihed_id[i]-1], d0=d0_dih[dihed_id[i]-1],
+            dihed_ff_tmp = ff_class.GAFF_Dihedral(ff_type=dihed_id[i], k=k_dih[dihed_id[i]-1], d0=d0_dih[dihed_id[i]-1],
                                    m=m_dih[dihed_id[i]-1], n=n_dih[dihed_id[i]-1])
             utils.add_dihedral(mol, dihed_atom[i][0]-1, dihed_atom[i][1]-1, dihed_atom[i][2]-1, dihed_atom[i][3]-1, ff=dihed_ff_tmp)
     else:
@@ -3198,7 +3202,7 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
 
     if 'impropers' in n_data.keys():
         for i in range(n_data['impropers']):
-            impro_ff_tmp = utils.Improper_ff(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
+            impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
             utils.add_improper(mol, impro_atom[i][0]-1, impro_atom[i][1]-1, impro_atom[i][2]-1, impro_atom[i][3]-1, ff=impro_ff_tmp)
     else:
         setattr(mol, 'impropers', [])

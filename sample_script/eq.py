@@ -4,7 +4,7 @@
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.2.8'
+__version__ = '0.2.10'
 
 import matplotlib
 matplotlib.use('Agg')
@@ -14,9 +14,11 @@ import os
 import uuid
 
 from radonpy.core import utils, calc, poly
-from radonpy.ff.gaff2_mod import GAFF2_mod
 from radonpy.sim import helper
 from radonpy.sim.preset import eq
+from radonpy.ff.gaff import GAFF
+from radonpy.ff.gaff2 import GAFF2
+from radonpy.ff.gaff2_mod import GAFF2_mod
 
 
 if __name__ == '__main__':
@@ -38,6 +40,7 @@ if __name__ == '__main__':
         'press': float(os.environ.get('RadonPy_Press', 1.0)),
         'input_tacticity': os.environ.get('RadonPy_Tacticity', 'atactic'),
         'tacticity': '',
+        'forcefield': str(os.environ.get('RadonPy_FF', 'GAFF2_mod')),
         'remarks': os.environ.get('RadonPy_Remarks', ''),
         **helper.get_version(),
         'preset_eq_ver': eq.__version__,
@@ -69,8 +72,13 @@ if __name__ == '__main__':
     mols = io.load_monomer_obj(share_dir=monomer_dir, data_dict=data)
     ter, ter2 = io.load_terminal_obj(share_dir=ter_dir, data_dict=data)
 
+    if data['forcefield'] == 'GAFF':
+        ff = GAFF()
+    elif data['forcefield'] == 'GAFF2':
+        ff = GAFF2()
+    elif data['forcefield'] == 'GAFF2_mod':
+        ff = GAFF2_mod()
 
-    ff = GAFF2_mod()
     n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter, terminal2=ter2)
     data['DP'] = n
 

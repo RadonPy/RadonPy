@@ -9,10 +9,10 @@
 import os
 import numpy as np
 from rdkit import Geometry as Geom
-from .lammps import LAMMPS, Analyze
+from .md_wrapper import MD_solver, MD_analyzer
 from ..core import calc, utils
 
-__version__ = '0.2.5'
+__version__ = '0.2.9'
 
 
 class MD():
@@ -282,10 +282,7 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
 
     """
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol, 'cell'):
@@ -302,7 +299,7 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
         utils.radon_print('Error termination of %s. Return code = %i' % (sol.get_name, cp.returncode), level=3)
         return None
 
-    anal = Analyze(os.path.join(sol.work_dir, md.log_file))
+    anal = MD_analyzer(log_file=os.path.join(sol.work_dir, md.log_file))
     energy = anal.dfs[-1]['PotEng'].iat[-1]
 
     if force:
@@ -337,10 +334,7 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
@@ -357,7 +351,7 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
 
     mol_copy = sol.run(md, mol=mol_copy, confId=confId, last_data=md.write_data, last_str=md.outstr, omp=omp, mpi=mpi, gpu=gpu)
 
-    anal = Analyze(os.path.join(sol.work_dir, md.log_file))
+    anal = MD_analyzer(log_file=os.path.join(sol.work_dir, md.log_file))
     energy = anal.dfs[-1]['PotEng'].iat[-1]
     uwstr, wstr, _, _, _ = sol.read_traj_simple(os.path.join(sol.work_dir, md.outstr))
 
@@ -395,10 +389,7 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
     exec_i = np.append(np.arange(mp, mol_copy.GetNumConformers(), mp), mol_copy.GetNumConformers()).tolist()
 
     for i in range(mol_copy.GetNumConformers()):
-        if solver == 'lammps':
-            sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=i)
-        #elif solver == 'gromacs':
-        #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+        sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=i)
 
         md = MD(idx=i)
         if not hasattr(mol_copy, 'cell'):
@@ -443,7 +434,7 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
                 if hasattr(mol_copy, 'cell'):
                     mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-                anal = Analyze(os.path.join(sol.work_dir, md.log_file))
+                anal = MD_analyzer(log_file=os.path.join(sol.work_dir, md.log_file))
                 energy = anal.dfs[-1]['PotEng'].iat[-1]
 
                 uwstr_list.append(uwstr)
@@ -477,10 +468,7 @@ def quick_rw(mol, confId=0, step=1000, time_step=0.2, limit=0.1, shake=False, id
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
@@ -540,10 +528,7 @@ def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, 
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
@@ -605,10 +590,7 @@ def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
@@ -675,10 +657,7 @@ def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
@@ -743,10 +722,7 @@ def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None,
     """
     mol_copy = utils.deepcopy_mol(mol)
 
-    if solver == 'lammps':
-        sol = LAMMPS(work_dir=work_dir, solver_path=solver_path, idx=idx)
-    #elif solver == 'gromacs':
-    #    sol = Gromacs(work_dir=work_dir, solver_path=solver_path)
+    sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
     md = MD(idx=idx)
     if not hasattr(mol_copy, 'cell'):
