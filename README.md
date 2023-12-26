@@ -4,7 +4,7 @@
 RadonPy is the first open-source Python library for fully automated calculation for a comprehensive set of polymer properties, using all-atom classical MD simulations. For a given polymer repeating unit with its chemical structure, the entire process of the MD simulation can be carried out fully automatically, including molecular modelling, equilibrium and non-equilibrium MD simulations, automatic determination of the completion of equilibration, scheduling of restarts in case of failure to converge, and property calculations in the post-process step. In this release, the library comprises the calculation of 15 properties at the amorphous state.
 
 ## Requirement
-- Python 3.7, 3.8, 3.9, 3.10, 3.11
+- Python 3.7, 3.8, 3.9, 3.10, 3.11, 3.12
 - LAMMPS >= 3Mar20
 - rdkit >= 2020.03
 - psi4 >= 1.5
@@ -148,7 +148,8 @@ MD simulations are available in this installation, but DFT calculations (conform
 - [1070 amorphous polymers](https://github.com/RadonPy/RadonPy/blob/develop/data/PI1070.csv)
 
 ## Publications
-1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater. 8:222 (2022) \[[Link](https://www.nature.com/articles/s41524-022-00906-4)\]
+1. Y. Hayashi, J. Shiomi, J. Morikawa, R. Yoshida, "RadonPy: Automated Physical Property Calculation using All-atom Classical Molecular Dynamics Simulations for Polymer Informatics," npj Comput. Mater., 8:222 (2022) \[[Link](https://www.nature.com/articles/s41524-022-00906-4)\]
+2. M. Kusaba, Y. Hayashi, C. Liu, A. Wakiuchi, R. Yoshida, "Representation of materials by kernel mean embedding", Phys. Rev. B, 108:134107 (2023)\[[Link](https://journals.aps.org/prb/abstract/10.1103/PhysRevB.108.134107)\]
 
 ## Contributors
 - Yoshihiro Hayashi (The Institute of Statistical Mathematics)
