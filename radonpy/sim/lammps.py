@@ -2596,7 +2596,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     i = 0
 
     if not mol.HasProp('pair_style'):
-        utils.radon_print('pair_style is missing. Assuming lj for pair_style.', level=2)
+        utils.radon_print('pair_style is missing in MolToLAMMPSdataBlock. Assuming lj for pair_style.', level=2)
         mol.SetProp('pair_style', 'lj')
     for atom in mol.GetAtoms():
         if atom.GetSymbol() == 'H' and atom.GetIsotope() == 3:
@@ -2619,7 +2619,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     b_coeff = []
     i = 0
     if not mol.HasProp('bond_style'):
-        utils.radon_print('bond_style is missing. Assuming harmonic for bond_style.', level=2)
+        utils.radon_print('bond_style is missing in MolToLAMMPSdataBlock. Assuming harmonic for bond_style.', level=2)
         mol.GetProp('bond_style', 'harmonic')
     for bond in mol.GetBonds():
         btype = bond.GetProp('ff_type')
@@ -2638,7 +2638,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     a_coeff = []
     i = 0
     if not mol.HasProp('angle_style'):
-        utils.radon_print('angle_style is missing. Assuming harmonic for angle_style.', level=2)
+        utils.radon_print('angle_style is missing in MolToLAMMPSdataBlock. Assuming harmonic for angle_style.', level=2)
         mol.SetProp('angle_style', 'harmonic')
     if hasattr(mol, 'angles'):
         for angle in mol.angles:
@@ -2657,7 +2657,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     d_coeff = []
     i = 0
     if not mol.HasProp('dihedral_style'):
-        utils.radon_print('dihedral_style is missing. Assuming fourier for dihedral_style.', level=2)
+        utils.radon_print('dihedral_style is missing in MolToLAMMPSdataBlock. Assuming fourier for dihedral_style.', level=2)
         mol.SetProp('dihedral_style', 'fourier')
     if hasattr(mol, 'dihedrals'):
         for dihedral in mol.dihedrals:
@@ -2681,7 +2681,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     i_coeff = []
     i = 0
     if not mol.HasProp('improper_style'):
-        utils.radon_print('improper_style is missing. Assuming cvff for improper_style.', level=2)
+        utils.radon_print('improper_style is missing in MolToLAMMPSdataBlock. Assuming cvff for improper_style.', level=2)
         mol.SetProp('improper_style', 'cvff')
     if hasattr(mol, 'impropers'):
         for improper in mol.impropers:
@@ -3290,9 +3290,9 @@ def MolFromLAMMPSdata(file_name, bond_order=True,
     if 'impropers' in n_data.keys():
         for i in range(n_data['impropers']):
             if ff_style['improper'] == 'cvff':
-                impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
+                impro_ff_tmp = ff_class.Improper_cvff(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
             elif ff_style['improper'] == 'umbrella':
-                impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], x0=x0_imp[impro_id[i]-1])
+                impro_ff_tmp = ff_class.Improper_umbrella(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], x0=x0_imp[impro_id[i]-1])
             else:
                 utils.radon_print('improper_style %s is not available.' % ff_style['improper'], level=3)                
             utils.add_improper(mol, impro_atom[i][0]-1, impro_atom[i][1]-1, impro_atom[i][2]-1, impro_atom[i][3]-1, ff=impro_ff_tmp)
