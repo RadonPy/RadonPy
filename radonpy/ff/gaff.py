@@ -14,7 +14,7 @@ from rdkit import Chem
 from ..core import calc, utils
 from . import ff_class
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 class GAFF():
@@ -85,6 +85,8 @@ class GAFF():
             Chem.rdmolops.Kekulize(mol, clearAromaticFlags=True)
             Chem.rdmolops.SetAromaticity(mol, model=Chem.rdmolops.AromaticityModel.AROMATICITY_MDL)
 
+        mol.SetProp('ff_name', str(self.name))
+        mol.SetProp('ff_class', str(self.ff_class))
         result = self.assign_ptypes(mol)
         if result: result = self.assign_btypes(mol)
         if result: result = self.assign_atypes(mol)
@@ -788,7 +790,7 @@ class GAFF():
     
         angle = utils.Angle(
             a=a, b=b, c=c,
-            ff=ff_class.GAFF_Angle(
+            ff=ff_class.Angle_harmonic(
                 ff_type=self.param.at[at].tag,
                 k=self.param.at[at].k,
                 theta0=self.param.at[at].theta0
@@ -883,7 +885,7 @@ class GAFF():
 
         dihedral = utils.Dihedral(
             a=a, b=b, c=c, d=d,
-            ff=ff_class.GAFF_Dihedral(
+            ff=ff_class.Dihedral_fourier(
                 ff_type=self.param.dt[dt].tag,
                 k=self.param.dt[dt].k,
                 d0=self.param.dt[dt].d,
@@ -977,7 +979,7 @@ class GAFF():
             
         improper = utils.Improper(
             a=a, b=b, c=c, d=d,
-            ff=ff_class.GAFF_Improper(
+            ff=ff_class.Improper_cvff(
                 ff_type=self.param.it[it].tag,
                 k=self.param.it[it].k,
                 d0=self.param.it[it].d,

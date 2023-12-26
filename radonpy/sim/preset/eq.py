@@ -15,7 +15,7 @@ from ...core import calc, const, utils
 from .. import lammps, preset
 from ..md import MD
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 class Equilibration(preset.Preset):
@@ -73,6 +73,10 @@ class Equilibration(preset.Preset):
         md.cutoff_out = ''
         md.kspace_style = 'none'
         md.kspace_style_accuracy = ''
+        md.bond_style = self.bond_style
+        md.angle_style = self.angle_style
+        md.dihedral_style = self.dihedral_style
+        md.improper_style = self.improper_style
         md.log_file = kwargs.get('log_file', self.log_file1)
         md.dat_file = kwargs.get('dat_file', self.dat_file1)
         md.dump_file = kwargs.get('dump_file', self.dump_file1)
@@ -100,6 +104,10 @@ class Equilibration(preset.Preset):
         md.cutoff_out = self.cutoff_out
         md.kspace_style = self.kspace_style
         md.kspace_style_accuracy = self.kspace_style_accuracy
+        md.bond_style = self.bond_style
+        md.angle_style = self.angle_style
+        md.dihedral_style = self.dihedral_style
+        md.improper_style = self.improper_style
         md.neighbor = '%s bin' % self.neighbor_dis
         md.log_file = kwargs.get('log_file', self.log_file2)
         md.dat_file = kwargs.get('dat_file', self.dat_file2)
@@ -149,6 +157,10 @@ class Equilibration(preset.Preset):
         md.cutoff_out = self.cutoff_out
         md.kspace_style = self.kspace_style
         md.kspace_style_accuracy = self.kspace_style_accuracy
+        md.bond_style = self.bond_style
+        md.angle_style = self.angle_style
+        md.dihedral_style = self.dihedral_style
+        md.improper_style = self.improper_style
         md.neighbor = '%s bin' % self.neighbor_dis
         md.log_file = kwargs.get('log_file', self.log_file2)
         md.dat_file = kwargs.get('dat_file', self.dat_file2)
@@ -183,6 +195,10 @@ class Equilibration(preset.Preset):
         md.cutoff_out = self.cutoff_out
         md.kspace_style = self.kspace_style
         md.kspace_style_accuracy = self.kspace_style_accuracy
+        md.bond_style = self.bond_style
+        md.angle_style = self.angle_style
+        md.dihedral_style = self.dihedral_style
+        md.improper_style = self.improper_style
         md.neighbor = '%s bin' % self.neighbor_dis
         md.log_file = kwargs.get('log_file', self.log_file)
         md.dat_file = kwargs.get('dat_file', self.dat_file)
@@ -496,16 +512,22 @@ def get_final_idx(work_dir):
     last_plist2 = glob.glob(os.path.join(work_dir, '*eq[0-9][0-9]_last.pickle'))
     last_plist3 = glob.glob(os.path.join(work_dir, '*eq[0-9][0-9][0-9]_last.pickle'))
 
-    if len(last_list) > 0:
-        if len(last_list2) > 0:
-            last_list.extend(last_list2)
-        if len(last_list3) > 0:
-            last_list.extend(last_list3)
+    last_jlist  = glob.glob(os.path.join(work_dir, '*eq[0-9]_last.json'))
+    last_jlist2 = glob.glob(os.path.join(work_dir, '*eq[0-9][0-9]_last.json'))
+    last_jlist3 = glob.glob(os.path.join(work_dir, '*eq[0-9][0-9][0-9]_last.json'))
+
+
+    if len(last_jlist) > 0:
+        last_list = last_jlist
+        if len(last_jlist2) > 0:
+            last_list.extend(last_jlist2)
+        if len(last_jlist3) > 0:
+            last_list.extend(last_jlist3)
 
         for file in last_list:
             file = os.path.basename(file)
 
-            m = re.search(r'eq[0-9]+_last\.data$', file)
+            m = re.search(r'eq[0-9]+_last\.json$', file)
             if m is not None:
                 mi = re.search(r'[0-9]+', m.group())
                 i = int(mi.group())
@@ -522,6 +544,21 @@ def get_final_idx(work_dir):
             file = os.path.basename(file)
 
             m = re.search(r'eq[0-9]+_last\.pickle$', file)
+            if m is not None:
+                mi = re.search(r'[0-9]+', m.group())
+                i = int(mi.group())
+                if i > idx: idx = i
+
+    elif len(last_list) > 0:
+        if len(last_list2) > 0:
+            last_list.extend(last_list2)
+        if len(last_list3) > 0:
+            last_list.extend(last_list3)
+
+        for file in last_list:
+            file = os.path.basename(file)
+
+            m = re.search(r'eq[0-9]+_last\.data$', file)
             if m is not None:
                 mi = re.search(r'[0-9]+', m.group())
                 i = int(mi.group())

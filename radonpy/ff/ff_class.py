@@ -8,18 +8,18 @@
 
 import numpy as np
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
-class GAFF_Angle():
+class Angle_harmonic():
     """
-        GAFF_Angle() class
+        Angle_harmonic() class
     """
     def __init__(self, ff_type=None, k=None, theta0=None):
-        self.type = ff_type
-        self.k = k
-        self.theta0 = theta0
-        self.theta0_rad = theta0*(np.pi/180)
+        self.type = str(ff_type)
+        self.k = float(k)
+        self.theta0 = float(theta0)
+        self.theta0_rad = float(theta0*(np.pi/180))
     
     def to_dict(self):
         dic = {
@@ -30,17 +30,17 @@ class GAFF_Angle():
         return dic
     
     
-class GAFF_Dihedral():
+class Dihedral_fourier():
     """
-        GAFF_Dihedral() class
+        Dihedral_fourier() class
     """
     def __init__(self, ff_type=None, k=[], d0=[], m=None, n=[]):
-        self.type = ff_type
-        self.k = np.array(k)
-        self.d0 = np.array(d0)
-        self.d0_rad = np.array(d0)*(np.pi/180)
-        self.m = m
-        self.n = np.array(n)
+        self.type = str(ff_type)
+        self.k = np.array(k, dtype=float)
+        self.d0 = np.array(d0, dtype=float)
+        self.d0_rad = np.array(d0, dtype=float)*(np.pi/180)
+        self.m = int(m)
+        self.n = np.array(n, dtype=int)
     
     def to_dict(self):
         dic = {
@@ -53,22 +53,59 @@ class GAFF_Dihedral():
         return dic
 
 
-class GAFF_Improper():
+class Dihedral_harmonic():
     """
-        GAFF_Improper() class
+        Dihedral_harmonic() class
     """
-    def __init__(self, ff_type=None, k=None, d0=-1, n=None):
-        self.type = ff_type
-        self.k = k
-        self.d0 = d0
-        self.n = n
+    def __init__(self, ff_type=None, k=None, d0=None, n=None):
+        self.type = str(ff_type)
+        self.k = float(k)
+        self.d0 = int(d0)
+        self.n = int(n)
     
     def to_dict(self):
         dic = {
             'ff_type': str(self.type),
             'k': float(self.k),
-            'd0': float(self.d0),
+            'd0': int(self.d0),
             'n': int(self.n),
         }
         return dic
 
+
+class Improper_cvff():
+    """
+        Improper_cvff() class
+    """
+    def __init__(self, ff_type=None, k=None, d0=-1, n=None):
+        self.type = str(ff_type)
+        self.k = float(k)
+        self.d0 = int(d0)
+        self.n = int(n)
+    
+    def to_dict(self):
+        dic = {
+            'ff_type': str(self.type),
+            'k': float(self.k),
+            'd0': int(self.d0),
+            'n': int(self.n),
+        }
+        return dic
+
+
+class Improper_umbrella():
+    """
+        Improper_umbrella() class
+    """
+    def __init__(self, ff_type=None, k=None, x0=None):
+        self.type = str(ff_type)
+        self.k = float(k)
+        self.x0 = float(x0)
+    
+    def to_dict(self):
+        dic = {
+            'ff_type': str(self.type),
+            'k': float(self.k),
+            'x0': float(self.x0),
+        }
+        return dic

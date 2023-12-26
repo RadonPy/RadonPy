@@ -17,6 +17,11 @@ from radonpy.sim import qm, helper
 from radonpy.ff.gaff import GAFF
 from radonpy.ff.gaff2 import GAFF2
 from radonpy.ff.gaff2_mod import GAFF2_mod
+try:
+    from radonpy.dev.ff.dreiding import Dreiding, Dreiding_UT
+    dreiding_avail = True
+except ImportError:
+    dreiding_avail = False
 
 
 if __name__ == '__main__':
@@ -67,6 +72,12 @@ if __name__ == '__main__':
         ff = GAFF2()
     elif data['forcefield'] == 'GAFF2_mod':
         ff = GAFF2_mod()
+    elif data['forcefield'] == 'Dreiding' and dreiding_avail:
+        ff = Dreiding()
+    elif data['forcefield'] == 'Dreiding_UT' and dreiding_avail:
+        ff = Dreiding_UT()
+    else:
+        raise ValueError("Force field %s is not available." % data['forcefield'])
 
     for i, smi in enumerate(smi_list):
         monomer_data = {

@@ -62,6 +62,24 @@ class MD():
         self.add = []
         self.add_f = []
 
+        if kwargs.get('mol') is not None:
+            mol = kwargs.get('mol')
+            if mol.HasProp('pair_style'):
+                if mol.GetProp('pair_style') == 'lj':
+                    self.pair_style = 'lj/charmm/coul/long'
+                    self.pair_style_nonpbc = 'lj/charmm/coul/charmm'
+                else:
+                    self.pair_style = mol.GetProp('pair_style')
+                    self.pair_style_nonpbc = mol.GetProp('pair_style')
+            if mol.HasProp('bond_style'):
+                self.bond_style = mol.GetProp('bond_style')
+            if mol.HasProp('angle_style'):
+                self.angle_style = mol.GetProp('angle_style')
+            if mol.HasProp('dihedral_style'):
+                self.dihedral_style = mol.GetProp('dihedral_style')
+            if mol.HasProp('improper_style'):
+                self.improper_style = mol.GetProp('improper_style')
+
 
     def add_min(self, min_style='cg', etol=1.0e-4, ftol=1.0e-6, maxiter=10000, maxeval=100000):
         mini = Minimize(min_style=min_style, etol=etol, ftol=ftol, maxiter=maxiter, maxeval=maxeval)
@@ -284,7 +302,7 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol, 'cell'):
         md.pbc = False
         calc.centering_mol(mol, confId=confId)
@@ -336,7 +354,7 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -391,7 +409,7 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
     for i in range(mol_copy.GetNumConformers()):
         sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=i)
 
-        md = MD(idx=i)
+        md = MD(idx=i, mol=mol_copy)
         if not hasattr(mol_copy, 'cell'):
             md.pbc = False
             calc.centering_mol(mol_copy, confId=i)
@@ -470,7 +488,7 @@ def quick_rw(mol, confId=0, step=1000, time_step=0.2, limit=0.1, shake=False, id
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -530,7 +548,7 @@ def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, 
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -592,7 +610,7 @@ def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -659,7 +677,7 @@ def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -724,7 +742,7 @@ def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx)
+    md = MD(idx=idx, mol=mol_copy)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)

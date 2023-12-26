@@ -16,7 +16,7 @@ from rdkit import Geometry as Geom
 from ...core import poly, utils, calc, const
 from .. import lammps, preset
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 class NEMD_MP(preset.Preset):
@@ -150,6 +150,10 @@ class NEMD_MP(preset.Preset):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
 
         in_strings += """
@@ -159,10 +163,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -820,6 +824,10 @@ class NEMD_MP_Additional(NEMD_MP):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
 
         in_strings += """
@@ -829,10 +837,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -1211,6 +1219,10 @@ class NEMD_Langevin(preset.Preset):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
         in_strings += """
 
@@ -1220,10 +1232,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -1784,6 +1796,10 @@ class EMD_GK(preset.Preset):
         in_strings += 'variable        pairst    string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1   string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2   string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst    string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest   string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst   string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst   string %s\n' % (self.improper_style)
         in_strings += """
 
 variable        NA     equal 6.02214076*1.0e23
@@ -1800,10 +1816,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
