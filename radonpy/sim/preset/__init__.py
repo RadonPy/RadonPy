@@ -40,3 +40,19 @@ class Preset():
         self.vel = np.array([])
         self.force = np.array([])
 
+        if self.mol.HasProp('pair_style'):
+            if self.mol.GetProp('pair_style') == 'lj':
+                self.pair_style = 'lj/charmm/coul/long'
+                self.pair_style_nonpbc = 'lj/charmm/coul/charmm'
+            else:
+                self.pair_style = self.mol.GetProp('pair_style')
+                self.pair_style_nonpbc = self.mol.GetProp('pair_style')
+        if self.mol.HasProp('bond_style'):
+            self.bond_style = self.mol.GetProp('bond_style')
+        if self.mol.HasProp('angle_style'):
+            self.angle_style = self.mol.GetProp('angle_style')
+        if self.mol.HasProp('dihedral_style'):
+            self.dihedral_style = self.mol.GetProp('dihedral_style')
+        if self.mol.HasProp('improper_style'):
+            self.improper_style = self.mol.GetProp('improper_style')
+

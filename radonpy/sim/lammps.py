@@ -2594,6 +2594,10 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     p_mass = []
     p_coeff = []
     i = 0
+
+    if not mol.HasProp('pair_style'):
+        utils.radon_print('pair_style is missing. Assuming lj for pair_style.', level=2)
+        mol.SetProp('pair_style', 'lj')
     for atom in mol.GetAtoms():
         if atom.GetSymbol() == 'H' and atom.GetIsotope() == 3:
             ptype = '%s,0' % atom.GetProp('ff_type')
@@ -2605,12 +2609,18 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             i += 1
             unique_ptype.append(ptype)
             p_mass.append(atom.GetMass())
-            p_coeff.append([atom.GetDoubleProp('ff_epsilon'), atom.GetDoubleProp('ff_sigma')])
+            if mol.GetProp('pair_style') == 'lj':
+                p_coeff.append([atom.GetDoubleProp('ff_epsilon'), atom.GetDoubleProp('ff_sigma')])
+            else:
+                utils.radon_print('pair_style %s is not available.' % mol.GetProp('pair_style'), level=3)
             atom.SetIntProp('ff_type_num', i)
 
     unique_btype = []
     b_coeff = []
     i = 0
+    if not mol.HasProp('bond_style'):
+        utils.radon_print('bond_style is missing. Assuming harmonic for bond_style.', level=2)
+        mol.GetProp('bond_style', 'harmonic')
     for bond in mol.GetBonds():
         btype = bond.GetProp('ff_type')
         if btype in unique_btype:
@@ -2618,12 +2628,18 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         else:
             i += 1
             unique_btype.append(btype)
-            b_coeff.append([bond.GetDoubleProp('ff_k'), bond.GetDoubleProp('ff_r0')])
+            if mol.GetProp('bond_style') == 'harmonic':
+                b_coeff.append([bond.GetDoubleProp('ff_k'), bond.GetDoubleProp('ff_r0')])
+            else:
+                utils.radon_print('bond_style %s is not available.' % mol.GetProp('bond_style'), level=3)
             bond.SetIntProp('ff_type_num', i)
 
     unique_atype = []
     a_coeff = []
     i = 0
+    if not mol.HasProp('angle_style'):
+        utils.radon_print('angle_style is missing. Assuming harmonic for angle_style.', level=2)
+        mol.SetProp('angle_style', 'harmonic')
     if hasattr(mol, 'angles'):
         for angle in mol.angles:
             if angle.ff.type in unique_atype:
@@ -2631,12 +2647,18 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             else:
                 i += 1
                 unique_atype.append(angle.ff.type)
-                a_coeff.append([angle.ff.k, angle.ff.theta0])
+                if mol.GetProp('angle_style') == 'harmonic':
+                    a_coeff.append([angle.ff.k, angle.ff.theta0])
+                else:
+                    utils.radon_print('angle_style %s is not available.' % mol.GetProp('angle_style'), level=3)
                 angle.ff.type_num = i
 
     unique_dtype = []
     d_coeff = []
     i = 0
+    if not mol.HasProp('dihedral_style'):
+        utils.radon_print('dihedral_style is missing. Assuming fourier for dihedral_style.', level=2)
+        mol.SetProp('dihedral_style', 'fourier')
     if hasattr(mol, 'dihedrals'):
         for dihedral in mol.dihedrals:
             if dihedral.ff.type in unique_dtype:
@@ -2644,15 +2666,23 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             else:
                 i += 1
                 unique_dtype.append(dihedral.ff.type)
-                coeff = [dihedral.ff.m]
-                for j in range(len(dihedral.ff.k)):
-                    coeff.extend([dihedral.ff.k[j], dihedral.ff.n[j], dihedral.ff.d0[j]])
-                d_coeff.append(coeff)
+                if mol.GetProp('dihedral_style') == 'fourier':
+                    coeff = [dihedral.ff.m]
+                    for j in range(len(dihedral.ff.k)):
+                        coeff.extend([dihedral.ff.k[j], dihedral.ff.n[j], dihedral.ff.d0[j]])
+                    d_coeff.append(coeff)
+                elif mol.GetProp('dihedral_style') == 'harmonic':
+                    d_coeff.append([dihedral.ff.k, dihedral.ff.d0, dihedral.ff.n])
+                else:
+                    utils.radon_print('dihedral_style %s is not available.' % mol.GetProp('dihedral_style'), level=3)
                 dihedral.ff.type_num = i
 
     unique_itype = []
     i_coeff = []
     i = 0
+    if not mol.HasProp('improper_style'):
+        utils.radon_print('improper_style is missing. Assuming cvff for improper_style.', level=2)
+        mol.SetProp('improper_style', 'cvff')
     if hasattr(mol, 'impropers'):
         for improper in mol.impropers:
             if improper.ff.type in unique_itype:
@@ -2660,7 +2690,12 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             else:
                 i += 1
                 unique_itype.append(improper.ff.type)
-                i_coeff.append([improper.ff.k, improper.ff.d0, improper.ff.n])
+                if mol.GetProp('improper_style') == 'cvff':
+                    i_coeff.append([improper.ff.k, improper.ff.d0, improper.ff.n])
+                elif mol.GetProp('improper_style') == 'umbrella':
+                    i_coeff.append([improper.ff.k, improper.ff.x0])
+                else:
+                    utils.radon_print('improper_style %s is not available.' % mol.GetProp('improper_style'), level=3)
                 improper.ff.type_num = i
 
     utils.set_mol_id(mol)
@@ -2705,7 +2740,9 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('')
 
         for i, ptype in enumerate(unique_ptype):
-            lines.append('%5d\t%f\t%f\t# %s' % (i+1, p_coeff[i][0], p_coeff[i][1], ptype))
+            c = '\t'.join([ '%f' % x for x in p_coeff[i] ])
+            #lines.append('%5d\t%f\t%f\t# %s' % (i+1, p_coeff[i][0], p_coeff[i][1], ptype))
+            lines.append('%5d\t%s\t# %s' % (i+1, c, ptype))
 
 
     if len(unique_btype) > 0:
@@ -2714,7 +2751,9 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('')
 
         for i, btype in enumerate(unique_btype):
-            lines.append('%5d\t%f\t%f\t# %s' % (i+1, b_coeff[i][0], b_coeff[i][1], btype))
+            c = '\t'.join([ '%f' % x for x in b_coeff[i] ])
+            #lines.append('%5d\t%f\t%f\t# %s' % (i+1, b_coeff[i][0], b_coeff[i][1], btype))
+            lines.append('%5d\t%s\t# %s' % (i+1, c, btype))
 
 
     if len(unique_atype) > 0:
@@ -2723,7 +2762,9 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('')
 
         for i, atype in enumerate(unique_atype):
-            lines.append('%5d\t%f\t%f\t# %s' % (i+1, a_coeff[i][0], a_coeff[i][1], atype))
+            c = '\t'.join([ '%f' % x for x in a_coeff[i] ])
+            #lines.append('%5d\t%f\t%f\t# %s' % (i+1, a_coeff[i][0], a_coeff[i][1], atype))
+            lines.append('%5d\t%s\t# %s' % (i+1, c, atype))
 
 
     if len(unique_dtype) > 0:
@@ -2732,11 +2773,14 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('')
 
         for i, dtype in enumerate(unique_dtype):
-            string = '%5d\t%i' % (i+1, d_coeff[i][0])
-            for j in range(d_coeff[i][0]):
-                string += '\t%f\t%i\t%f' % (d_coeff[i][j*3+1], d_coeff[i][j*3+2], d_coeff[i][j*3+3])
-            string += '\t# %s' % (dtype)
-            lines.append(string)
+            # string = '%5d\t%i' % (i+1, d_coeff[i][0])
+            # for j in range(d_coeff[i][0]):
+            #     string += '\t%f\t%i\t%f' % (d_coeff[i][j*3+1], d_coeff[i][j*3+2], d_coeff[i][j*3+3])
+            # string += '\t# %s' % (dtype)
+            # lines.append(string)
+            c = '\t'.join([ '%f' % x if type(x) is float else '%i' % x for x in d_coeff[i]])
+            lines.append('%5d\t%s\t# %s' % (i+1, c, dtype))
+
 
     if len(unique_itype) > 0:
         lines.append('')
@@ -2744,7 +2788,9 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
         lines.append('')
 
         for i, itype in enumerate(unique_itype):
-            lines.append('%5d\t%f\t%i\t%i\t# %s' % (i+1, i_coeff[i][0], i_coeff[i][1], i_coeff[i][2], itype))
+            #lines.append('%5d\t%f\t%i\t%i\t# %s' % (i+1, i_coeff[i][0], i_coeff[i][1], i_coeff[i][2], itype))
+            c = '\t'.join([ '%f' % x if type(x) is float else '%i' % x for x in i_coeff[i] ])
+            lines.append('%5d\t%s\t# %s' % (i+1, c, itype))
 
 
     if mol.GetNumAtoms() > 0:
@@ -2814,7 +2860,8 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     return lines
 
 
-def MolFromLAMMPSdata(file_name, bond_order=True):
+def MolFromLAMMPSdata(file_name, bond_order=True,
+    ff_style={'pair':'lj', 'bond':'harmonic', 'angle':'harmonic', 'dihedral':'fourier', 'improper':'cvff'}):
 
     flag = 'init'
     flag2 = False
@@ -2903,8 +2950,11 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     flag2 = False
                 elif flag2:
                     vals = line.split()
-                    epsilon.append(float(vals[1]))
-                    sigma.append(float(vals[2]))
+                    if ff_style['pair'] == 'lj':
+                        epsilon.append(float(vals[1]))
+                        sigma.append(float(vals[2]))
+                    else:
+                        utils.radon_print('pair_style %s is not available.' % ff_style['pair'], level=3)
 
             elif flag == 'bond_c':
                 if not flag2:
@@ -2914,8 +2964,11 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     flag2 = False
                 elif flag2:
                     vals = line.split()
-                    k_bond.append(float(vals[1]))
-                    r0.append(float(vals[2]))
+                    if ff_style['bond'] == 'harmonic':
+                        k_bond.append(float(vals[1]))
+                        r0.append(float(vals[2]))
+                    else:
+                        utils.radon_print('bond_style %s is not available.' % ff_style['bond'], level=3)
 
             elif flag == 'angle_c':
                 if not flag2:
@@ -2925,8 +2978,11 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     flag2 = False
                 elif flag2:
                     vals = line.split()
-                    k_angle.append(float(vals[1]))
-                    theta0.append(float(vals[2]))
+                    if ff_style['angle'] == 'harmonic':
+                        k_angle.append(float(vals[1]))
+                        theta0.append(float(vals[2]))
+                    else:
+                        utils.radon_print('angle_style %s is not available.' % ff_style['angle'], level=3)
 
             elif flag == 'dihed_c':
                 if not flag2:
@@ -2939,14 +2995,22 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     n_dih_tmp = []
                     d0_dih_tmp = []
                     vals = line.split()
-                    m_dih.append(int(vals[1]))
-                    for j in range(int(vals[1])):
-                        k_dih_tmp.append(float(vals[j*3+2]))
-                        n_dih_tmp.append(int(vals[j*3+3]))
-                        d0_dih_tmp.append(float(vals[j*3+4]))
-                    k_dih.append(k_dih_tmp)
-                    n_dih.append(n_dih_tmp)
-                    d0_dih.append(d0_dih_tmp)
+                    if ff_style['dihedral'] == 'fourier':
+                        m_dih.append(int(vals[1]))
+                        for j in range(int(vals[1])):
+                            k_dih_tmp.append(float(vals[j*3+2]))
+                            n_dih_tmp.append(int(vals[j*3+3]))
+                            d0_dih_tmp.append(float(vals[j*3+4]))
+                        k_dih.append(k_dih_tmp)
+                        n_dih.append(n_dih_tmp)
+                        d0_dih.append(d0_dih_tmp)
+                    elif ff_style['dihedral'] == 'harmonic':
+                        k_dih.append(float(vals[1]))
+                        n_dih.append(float(vals[2]))
+                        d0_dih.append(float(vals[3]))
+                    else:
+                        utils.radon_print('dihedral_style %s is not available.' % ff_style['dihedral'], level=3)
+
 
             elif flag == 'impro_c':
                 if not flag2:
@@ -2956,9 +3020,15 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     flag2 = False
                 elif flag2:
                     vals = line.split()
-                    k_imp.append(float(vals[1]))
-                    d0_imp.append(float(vals[2]))
-                    n_imp.append(int(vals[3]))
+                    if ff_style['improper'] == 'cvff':
+                        k_imp.append(float(vals[1]))
+                        d0_imp.append(float(vals[2]))
+                        n_imp.append(int(vals[3]))
+                    elif ff_style['improper'] == 'umbrella':
+                        k_imp.append(float(vals[1]))
+                        d0_imp.append(float(vals[2]))
+                    else:
+                        utils.radon_print('improper_style %s is not available.' % ff_style['improper'], level=3)
 
             elif flag == 'atom':
                 if not flag2:
@@ -3050,14 +3120,19 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
                     impro_atom[i-1] = [int(vals[2]), int(vals[3]), int(vals[4]), int(vals[5])]
 
     rwmol = Chem.RWMol()
-    w2ele = {1:'H', 2:'H', 3:'H', 12:'C', 14:'N', 16:'O', 19:'F', 31:'P', 32:'S', 35:'Cl', 80:'Br', 127:'I'}
+    w2ele = {1:'H', 2:'H', 3:'H', 12:'C', 14:'N', 16:'O', 19:'F', 28:'Si', 31:'P', 32:'S', 35:'Cl', 80:'Br', 127:'I'}
 
     for i in range(n_data['atoms']):
         atom_tmp = Chem.Atom(w2ele[round(mass[atom_id[i]-1])])
         atom_tmp.SetProp('ff_type', str(atom_id[i]))
         atom_tmp.SetIntProp('ff_type_num', int(atom_id[i]))
-        atom_tmp.SetDoubleProp('ff_epsilon', float(epsilon[atom_id[i]-1]))
-        atom_tmp.SetDoubleProp('ff_sigma', float(sigma[atom_id[i]-1]))
+
+        if ff_style['pair'] == 'lj':
+            atom_tmp.SetDoubleProp('ff_epsilon', float(epsilon[atom_id[i]-1]))
+            atom_tmp.SetDoubleProp('ff_sigma', float(sigma[atom_id[i]-1]))
+        else:
+            utils.radon_print('pair_style %s is not available.' % ff_style['pair'], level=3)
+
         atom_tmp.SetDoubleProp('AtomicCharge', float(charge[i]))
         atom_tmp.SetIntProp('mol_id', int(mol_id[i]))
         if int(mass[atom_id[i]-1]) == 2: atom_tmp.SetIsotope(2)
@@ -3179,33 +3254,56 @@ def MolFromLAMMPSdata(file_name, bond_order=True):
         bond_idx = rwmol.AddBond(a_idx, b_idx, order=b_order)
         rwmol.GetBondWithIdx(bond_idx-1).SetProp('ff_type', str(bond_id[i]))
         rwmol.GetBondWithIdx(bond_idx-1).SetIntProp('ff_type_num', int(bond_id[i]))
-        rwmol.GetBondWithIdx(bond_idx-1).SetDoubleProp('ff_k', float(k_bond[bond_id[i]-1]))
-        rwmol.GetBondWithIdx(bond_idx-1).SetDoubleProp('ff_r0', float(r0[bond_id[i]-1]))
+        if ff_style['bond'] == 'harmonic':
+            rwmol.GetBondWithIdx(bond_idx-1).SetDoubleProp('ff_k', float(k_bond[bond_id[i]-1]))
+            rwmol.GetBondWithIdx(bond_idx-1).SetDoubleProp('ff_r0', float(r0[bond_id[i]-1]))
+        else:
+            utils.radon_print('bond_style %s is not available.' % ff_style['bond'], level=3)
 
     if bond_order: Chem.SanitizeMol(rwmol)
     mol = rwmol.GetMol()
 
     if 'angles' in n_data.keys():
         for i in range(n_data['angles']):
-            angle_ff_tmp = ff_class.GAFF_Angle(ff_type=angle_id[i], k=k_angle[angle_id[i]-1], theta0=theta0[angle_id[i]-1])
+            if ff_style['angle'] == 'harmonic':
+                angle_ff_tmp = ff_class.Angle_harmonic(ff_type=angle_id[i], k=k_angle[angle_id[i]-1], theta0=theta0[angle_id[i]-1])
+            else:
+                utils.radon_print('angle_style %s is not available.' % ff_style['angle'], level=3)
             utils.add_angle(mol, angle_atom[i][0]-1, angle_atom[i][1]-1, angle_atom[i][2]-1, ff=angle_ff_tmp)
     else:
         setattr(mol, 'angles', [])
 
     if 'dihedrals' in n_data.keys():
         for i in range(n_data['dihedrals']):
-            dihed_ff_tmp = ff_class.GAFF_Dihedral(ff_type=dihed_id[i], k=k_dih[dihed_id[i]-1], d0=d0_dih[dihed_id[i]-1],
-                                   m=m_dih[dihed_id[i]-1], n=n_dih[dihed_id[i]-1])
+            if ff_style['dihedral'] == 'fourier':
+                dihed_ff_tmp = ff_class.Dihedral_fourier(ff_type=dihed_id[i], k=k_dih[dihed_id[i]-1], d0=d0_dih[dihed_id[i]-1],
+                                       m=m_dih[dihed_id[i]-1], n=n_dih[dihed_id[i]-1])
+            elif ff_style['dihedral'] == 'harmonic':
+                dihed_ff_tmp = ff_class.Dihedral_harmonic(ff_type=dihed_id[i], k=k_dih[dihed_id[i]-1], d0=d0_dih[dihed_id[i]-1],
+                                       n=n_dih[dihed_id[i]-1])
+            else:
+                utils.radon_print('dihedral_style %s is not available.' % ff_style['dihedral'], level=3)
             utils.add_dihedral(mol, dihed_atom[i][0]-1, dihed_atom[i][1]-1, dihed_atom[i][2]-1, dihed_atom[i][3]-1, ff=dihed_ff_tmp)
     else:
         setattr(mol, 'dihedrals', [])
 
     if 'impropers' in n_data.keys():
         for i in range(n_data['impropers']):
-            impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
+            if ff_style['improper'] == 'cvff':
+                impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], d0=d0_imp[impro_id[i]-1], n=n_imp[impro_id[i]-1])
+            elif ff_style['improper'] == 'umbrella':
+                impro_ff_tmp = ff_class.GAFF_Improper(ff_type=impro_id[i], k=k_imp[impro_id[i]-1], x0=x0_imp[impro_id[i]-1])
+            else:
+                utils.radon_print('improper_style %s is not available.' % ff_style['improper'], level=3)                
             utils.add_improper(mol, impro_atom[i][0]-1, impro_atom[i][1]-1, impro_atom[i][2]-1, impro_atom[i][3]-1, ff=impro_ff_tmp)
     else:
         setattr(mol, 'impropers', [])
+
+    mol.SetProp('pair_style', ff_style['pair']) 
+    mol.SetProp('bond_style', ff_style['bond'])
+    mol.SetProp('angle_style', ff_style['angle'])
+    mol.SetProp('dihedral_style', ff_style['dihedral'])
+    mol.SetProp('improper_style', ff_style['improper'])
 
     setattr(mol, 'cell', utils.Cell(cell_data['xhi'], cell_data['xlo'], cell_data['yhi'], cell_data['ylo'], cell_data['zhi'], cell_data['zlo']))
 

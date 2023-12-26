@@ -4,7 +4,7 @@
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
-__version__ = '0.2.10'
+__version__ = '0.2.9'
 
 import matplotlib
 matplotlib.use('Agg')
@@ -19,6 +19,11 @@ from radonpy.sim.preset import eq
 from radonpy.ff.gaff import GAFF
 from radonpy.ff.gaff2 import GAFF2
 from radonpy.ff.gaff2_mod import GAFF2_mod
+try:
+    from radonpy.dev.ff.dreiding import Dreiding, Dreiding_UT
+    dreiding_avail = True
+except ImportError:
+    dreiding_avail = False
 
 
 if __name__ == '__main__':
@@ -78,6 +83,12 @@ if __name__ == '__main__':
         ff = GAFF2()
     elif data['forcefield'] == 'GAFF2_mod':
         ff = GAFF2_mod()
+    elif data['forcefield'] == 'Dreiding' and dreiding_avail:
+        ff = Dreiding()
+    elif data['forcefield'] == 'Dreiding_UT' and dreiding_avail:
+        ff = Dreiding_UT()
+    else:
+        raise ValueError("Force field %s is not available." % data['forcefield'])
 
     n = poly.calc_n_from_num_atoms(mols, data['input_natom'], ratio=ratio, terminal1=ter, terminal2=ter2)
     data['DP'] = n

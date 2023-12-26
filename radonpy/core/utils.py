@@ -18,7 +18,7 @@ from rdkit.Chem import AllChem
 from . import const
 from ..ff import ff_class
 
-__version__ = '0.2.8'
+__version__ = '0.2.9'
 
 
 class Angle():
@@ -872,7 +872,17 @@ def MolToJSON_dict(mol, useRDKitExtensions=False):
 def JSONToMol(file):
     with open(file, mode='r') as f:
         json_dict = json.load(f)
+    mol = JSONToMol_dict(json_dict)
+    return mol
 
+
+def JSONToMol_str(json_str):
+    json_dict = json.loads(json_str)
+    mol = JSONToMol_dict(json_dict)
+    return mol
+
+
+def JSONToMol_dict(json_dict):
     radonpy_ext = None
     for ext in json_dict['molecules'][0]['extensions']:
         if 'name' in ext and ext['name'] == 'radonpy_extention':
@@ -883,6 +893,9 @@ def JSONToMol(file):
     mol = Chem.rdMolInterchange.JSONToMols(json.dumps(json_dict))[0]
     Chem.SanitizeMol(mol)
 
+    if not mol.HasProp('pair_style'):
+        radon_print('pair_style is missing. Assuming lj for pair_style.', level=2)
+        mol.SetProp('pair_style', 'lj')
     for i, a in enumerate(mol.GetAtoms()):
         atom_data = radonpy_ext['atoms'][i]
 
@@ -932,6 +945,9 @@ def JSONToMol(file):
             )
 
 
+    if not mol.HasProp('bond_style'):
+        radon_print('bond_style is missing. Assuming harmonic for bond_style.', level=2)
+        mol.SetProp('bond_style', 'harmonic')
     for i, b in enumerate(mol.GetBonds()):
         bond_data = radonpy_ext['bonds'][i]
 
@@ -944,11 +960,14 @@ def JSONToMol(file):
             b.SetDoubleProp('ff_r0', float(bond_data['ff_r0']))
 
 
+    if not mol.HasProp('angle_style'):
+        radon_print('angle_style is missing. Assuming harmonic for angle_style.', level=2)
+        mol.SetProp('angle_style', 'harmonic')
     if 'angles' in radonpy_ext:
-        if hasattr(mol, 'angle_style') and mol.angle_style == 'harmonic':
-            angle_class = ff_class.GAFF_Angle
+        if mol.GetProp('angle_style') == 'harmonic':
+            angle_class = ff_class.Angle_harmonic
         else:
-            angle_class = ff_class.GAFF_Angle
+            radon_print('angle_style %s is not available.' % mol.GetProp('angle_style'), level=3)
 
         angle_prop = []
         for ang in radonpy_ext['angles']:
@@ -964,11 +983,16 @@ def JSONToMol(file):
         setattr(mol, 'angles', angle_prop)
 
 
+    if not mol.HasProp('dihedral_style'):
+        radon_print('dihedral_style is missing. Assuming fourier for dihedral_style.', level=2)
+        mol.SetProp('dihedral_style', 'fourier')
     if 'dihedrals' in radonpy_ext:
-        if hasattr(mol, 'dihedral_style') and mol.dihedral_style == 'fourier':
-            dihedral_class = ff_class.GAFF_Dihedral
+        if mol.GetProp('dihedral_style') == 'fourier':
+            dihedral_class = ff_class.Dihedral_fourier
+        elif mol.GetProp('dihedral_style') == 'harmonic':
+            dihedral_class = ff_class.Dihedral_harmonic
         else:
-            dihedral_class = ff_class.GAFF_Dihedral
+            radon_print('dihedral_style %s is not available.' % mol.GetProp('dihedral_style'), level=3)
 
         dihedral_prop = []
         for dih in radonpy_ext['dihedrals']:
@@ -985,11 +1009,16 @@ def JSONToMol(file):
         setattr(mol, 'dihedrals', dihedral_prop)
 
 
+    if not mol.HasProp('improper_style'):
+        radon_print('improper_style is missing. Assuming cvff for improper_style.', level=2)
+        mol.SetProp('improper_style', 'cvff')
     if 'impropers' in radonpy_ext:
-        if hasattr(mol, 'improper_style') and mol.improper_style == 'cvff':
-            improper_class = ff_class.GAFF_Improper
+        if mol.GetProp('improper_style') == 'cvff':
+            improper_class = ff_class.Improper_cvff
+        elif mol.GetProp('improper_style') == 'umbrella':
+            improper_class = ff_class.Improper_umbrella
         else:
-            improper_class = ff_class.GAFF_Improper
+            radon_print('improper_style %s is not available.' % mol.GetProp('improper_style'), level=3)
 
         improper_prop = []
         for imp in radonpy_ext['impropers']:
