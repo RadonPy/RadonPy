@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -16,16 +16,34 @@ import pandas as pd
 import rdkit
 
 from ..core import utils
-from ..__init__ import __version__ as radonpy_ver
-from .lammps import LAMMPS
+from . import lammps
+from .preset import eq
 
-psi4_ver = None
-try:
-    from psi4 import __version__ as psi4_ver
-except ImportError:
-    psi4_ver = None
+__version__ = '0.2.9'
 
-__version__ = '0.2.0'
+
+def get_version():
+    from ..__init__ import __version__ as radonpy_ver
+
+    try:
+        from psi4 import __version__ as psi4_ver
+    except ImportError:
+        psi4_ver = None
+
+    try:
+        lammps_ver = lammps.LAMMPS().get_version()
+    except:
+        lammps_ver = None
+
+    ver = {
+        'Python_ver': platform.python_version(),
+        'RadonPy_ver': radonpy_ver,
+        'RDKit_ver': rdkit.__version__,
+        'Psi4_ver': psi4_ver,
+        'LAMMPS_ver': lammps_ver,
+    }
+
+    return ver 
 
 
 class Pipeline_Helper():
@@ -99,6 +117,8 @@ class Pipeline_Helper():
         if read_csv is not None:
             self.read_csv(read_csv)
 
+        ver_info = get_version()
+
         # Set input data
         now = datetime.datetime.now()
         self.indata = {
@@ -126,11 +146,11 @@ class Pipeline_Helper():
             # Meta data are allways overwritten by new informations
             'remarks': os.environ.get('RadonPy_Remarks', str('')),
             'date': '%04i-%02i-%02i-%02i-%02i-%02i' % (now.year, now.month, now.day, now.hour, now.minute, now.second),
-            'Python_ver': platform.python_version(),
-            'RadonPy_ver': radonpy_ver,
-            'RDKit_ver': rdkit.__version__,
-            'Psi4_ver': psi4_ver,
-            'LAMMPS_ver': LAMMPS().get_version(),
+            'Python_ver': ver_info['Python_ver'],
+            'RadonPy_ver': ver_info['RadonPy_ver'],
+            'RDKit_ver': ver_info['RDKit_ver'],
+            'Psi4_ver': ver_info['Psi4_ver'],
+            'LAMMPS_ver': ver_info['LAMMPS_ver'],
         }
 
         envkeys = {
@@ -419,4 +439,286 @@ class Pipeline_Helper():
                 return mol
 
         utils.radon_print('Cannot restore mod=%s.' % mod, level=3)
+
+
+class IO_Helper():
+    def __init__(self, work_dir, save_dir, share_dir=[]):
+        self.work_dir = work_dir
+        self.save_dir = save_dir
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        self.share_dir = share_dir
+
+    def update_monomer_data(self, update_dict, data_dict, monomer_dict, monomer_idx=0):
+        monomer_dict.update(update_dict)
+        monomer_df = pd.DataFrame(monomer_dict, index=[0])
+        if data_dict.get('monomer_ID'):
+            monomer_id = data_dict['monomer_ID'].split(',')
+            monomer_df = monomer_df.set_index('monomer_ID')
+            monomer_df.to_csv(os.path.join(self.save_dir, 'monomer_%s_data.csv' % monomer_id[monomer_idx]))
+        else:
+            monomer_df.to_csv(os.path.join(self.save_dir, 'monomer%i_data.csv' % (monomer_idx+1)))
+
+        for k in update_dict.keys():
+            data_dict['%s_monomer%i' % (k, monomer_idx+1)] = update_dict[k]
+        data_df = pd.DataFrame(data_dict, index=[0]).set_index('DBID')
+        data_df.to_csv(os.path.join(self.save_dir, 'qm_data.csv'))
+
+        return data_dict, monomer_dict
+
+
+    def load_monomer_csv(self, share_dir=[], data_dict={}):
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        if len(share_dir) > 0 and data_dict.get('monomer_ID'):
+            monomer_id = data_dict['monomer_ID'].split(',')
+            monomer_dir = []
+            if data_dict.get('copoly_ratio_list'):
+                if len(str(data_dict['copoly_ratio_list']).split(',')) == len(monomer_id):
+                    ratio = [float(x) for x in str(data_dict['copoly_ratio_list']).split(',')]
+                else:
+                    ratio = [1.0 for x in range(len(monomer_id))]
+            else:
+                ratio = [1.0 for x in range(len(monomer_id))]
+
+            for i, mid in enumerate(monomer_id):
+                monomer_path = None
+                for d in share_dir:
+                    monomer_path = os.path.join(d, 'monomer_%s_data.csv' % mid)
+                    if os.path.isfile(monomer_path):
+                        break
+                if monomer_path is None:
+                    raise Exception('ERROR: Cannot find monomer data of %s.' % mid)
+
+                monomer_dir.append(d)
+                monomer_df = pd.read_csv(monomer_path, index_col=0)
+                monomer_data = monomer_df.iloc[0].to_dict()
+                data_dict['smiles_%i' % (i+1)] = monomer_data.pop('smiles')
+                data_dict['monomer_ID_%i' % (i+1)] = mid
+                data_dict['copoly_ratio_%i' % (i+1)] = ratio[i]
+                for k in monomer_data.keys():
+                    data_dict['%s_monomer%i' % (k, i+1)] = monomer_data[k]
+
+        elif os.path.isfile(os.path.join(self.save_dir, 'qm_data.csv')):
+            qm_df = pd.read_csv(os.path.join(self.save_dir, 'qm_data.csv'), index_col=0)
+            qm_data = qm_df.iloc[0].to_dict()
+            data_dict = {**qm_data, **data_dict}
+            data_dict['monomer_dir'] = self.save_dir
+
+        elif os.path.isfile(os.path.join(self.work_dir, 'qm_data.csv')):
+            qm_df = pd.read_csv(os.path.join(self.work_dir, 'qm_data.csv'), index_col=0)
+            qm_data = qm_df.iloc[0].to_dict()
+            data_dict = {**qm_data, **data_dict}
+            data_dict['monomer_dir'] = self.work_dir
+
+        else:
+            raise Exception('ERROR: Cannot find monomer data.')
+
+        return data_dict
+
+
+    def load_monomer_obj(self, share_dir=[], data_dict={}):
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        mols = []
+        if data_dict.get('monomer_ID'):
+            monomer_id = data_dict['monomer_ID'].split(',')
+            for i in range(len(monomer_id)):
+                mol = None
+                for d in share_dir:
+                    json_path = os.path.join(d, 'monomer_%s.json' % (monomer_id[i]))
+                    if os.path.isfile(json_path):
+                        mol = utils.JSONToMol(json_path)
+                        break
+
+                    pickle_path = os.path.join(d, 'monomer_%s.pickle' % (monomer_id[i]))
+                    if os.path.isfile(pickle_path):
+                        mol = utils.pickle_load(pickle_path)
+                        break
+
+                if mol is None:
+                    raise Exception('ERROR: Cannot find monomer object file of %s.' % monomer_id[i])
+
+                mols.append(mol)
+
+        else:
+            smi_list = data_dict['smiles_list'].split(',')
+            for i in range(len(smi_list)):
+                mol = None
+                for d in share_dir:
+                    json_path = os.path.join(d, 'monomer%i.json' % (i+1))
+                    if os.path.isfile(json_path):
+                        mol = utils.JSONToMol(json_path)
+                        break
+
+                    pickle_path = os.path.join(d, 'monomer%i.pickle' % (i+1))
+                    if os.path.isfile(pickle_path):
+                        mol = utils.pickle_load(pickle_path)
+                        break
+
+                if mol is None:
+                    raise Exception('ERROR: Cannot find monomer object file of monomer%i.' % (i+1))
+
+                mols.append(mol)
+
+        return mols
+
+
+    def load_terminal_obj(self, share_dir=[], data_dict={}):
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+        ter1, ter2 = None, None
+
+        if data_dict.get('ter_ID_1'):
+            for d in share_dir:
+                json_path = os.path.join(d, 'ter_%s.json' % data_dict['ter_ID_1'])
+                if os.path.isfile(json_path):
+                    ter1 = utils.JSONToMol(json_path)
+                    break
+
+                pickle_path = os.path.join(d, 'ter_%s.pickle' % data_dict['ter_ID_1'])
+                if os.path.isfile(pickle_path):
+                    ter1 = utils.pickle_load(pickle_path)
+                    break
+
+            if ter1 is None:
+                raise Exception('ERROR: Cannot find monomer object file of ter_%s.' % data_dict['ter_ID_1'])
+
+        else:
+            for d in share_dir:
+                json_path = os.path.join(d, 'ter1.json')
+                if os.path.isfile(json_path):
+                    ter1 = utils.JSONToMol(json_path)
+                    break
+
+                pickle_path = os.path.join(d, 'ter1.pickle')
+                if os.path.isfile(pickle_path):
+                    ter1 = utils.pickle_load(pickle_path)
+                    break
+
+            if ter1 is None:
+                raise Exception('ERROR: Cannot find monomer object file of ter1.')
+
+        if data_dict.get('ter_ID_2'):
+            for d in share_dir:
+                json_path = os.path.join(d, 'ter_%s.json' % data_dict['ter_ID_2'])
+                if os.path.isfile(json_path):
+                    ter2 = utils.JSONToMol(json_path)
+                    break
+
+                pickle_path = os.path.join(d, 'ter_%s.pickle' % data_dict['ter_ID_2'])
+                if os.path.isfile(pickle_path):
+                    ter2 = utils.pickle_load(pickle_path)
+                    break
+
+            if ter2 is None:
+                raise Exception('ERROR: Cannot find monomer object file of ter_%s.' % data_dict['ter_ID_2'])
+
+        else:
+            for d in share_dir:
+                json_path = os.path.join(d, 'ter2.json')
+                if os.path.isfile(json_path):
+                    ter2 = utils.JSONToMol(json_path)
+                    break
+
+                pickle_path = os.path.join(d, 'ter2.pickle')
+                if os.path.isfile(pickle_path):
+                    ter2 = utils.pickle_load(pickle_path)
+                    break
+
+        return ter1, ter2
+
+
+    def exist_monomer_csv(self, monomer_id, share_dir=[]):
+        exi = False
+
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        for d in share_dir:
+            monomer_path = os.path.join(d, 'monomer_%s_data.csv' % monomer_id)
+            if os.path.isfile(monomer_path):
+                exi = True
+                break
+                
+        return exi
+
+
+    def exist_monomer_obj(self, monomer_id, share_dir=[]):
+        exi = False
+
+        if type(share_dir) is not list:
+            share_dir = [share_dir]
+        share_dir = [self.save_dir, self.work_dir, *share_dir, *self.share_dir]
+
+        for d in share_dir:
+            json_path = os.path.join(d, 'monomer_%s.json' % (monomer_id))
+            if os.path.isfile(json_path):
+                exi = True
+                break
+
+            pickle_path = os.path.join(d, 'monomer_%s.pickle' % (monomer_id))
+            if os.path.isfile(pickle_path):
+                exi = True
+                break
+
+        return exi
+
+
+    def load_md_csv(self, data_dict):
+        # Load input_data.csv file
+        if os.path.isfile(os.path.join(self.save_dir, 'results.csv')):
+            input_df = pd.read_csv(os.path.join(self.save_dir, 'results.csv'), index_col=0)
+        elif os.path.isfile(os.path.join(self.save_dir, 'input_data.csv')):
+            input_df = pd.read_csv(os.path.join(self.save_dir, 'input_data.csv'), index_col=0)
+        else:
+            input_df = pd.read_csv(os.path.join(self.work_dir, 'input_data.csv'), index_col=0)
+        input_data = input_df.iloc[0].to_dict()
+        data_dict = {**input_data, **data_dict}
+
+        return data_dict
+
+
+    def load_md_obj(self, rst_json_file=None, rst_pickle_file=None):
+        # Load JSON file or pickle file or LAMMPS data file
+        mol = None
+        if not rst_json_file:
+            rst_json_file = eq.get_final_json([self.save_dir, self.work_dir])
+            if rst_json_file:
+                mol = utils.JSONToMol(rst_json_file)
+        else:
+            mol = utils.JSONToMol(os.path.join(self.work_dir, rst_json_file))
+
+        if mol is None:
+            if not rst_pickle_file:
+                rst_pickle_file = eq.get_final_pickle([self.save_dir, self.work_dir])
+                if rst_pickle_file:
+                    mol = utils.pickle_load(rst_pickle_file)
+            else:
+                mol = utils.pickle_load(os.path.join(self.work_dir, rst_pickle_file))
+
+        if mol is None:
+            rst_data_file = eq.get_final_data(self.work_dir)
+            if rst_data_file:
+                mol = lammps.MolFromLAMMPSdata(rst_data_file)
+
+        return mol
+
+
+    def output_md_data(self, data_dict):
+        if os.path.isfile(os.path.join(self.save_dir, 'results.csv')):
+            now = datetime.datetime.now()
+            shutil.copyfile(os.path.join(self.save_dir, 'results.csv'),
+                os.path.join(self.save_dir, 'results_%i-%i-%i-%i-%i-%i.csv' % (now.year, now.month, now.day, now.hour, now.minute, now.second)))
+
+        # Data output after equilibration MD
+        eq_data_df = pd.DataFrame(data_dict, index=[0]).set_index('DBID')
+        eq_data_df.to_csv(os.path.join(self.save_dir, 'results.csv'))
 

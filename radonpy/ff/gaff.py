@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -12,8 +12,9 @@ import json
 from itertools import permutations
 from rdkit import Chem
 from ..core import calc, utils
+from . import ff_class
 
-__version__ = '0.2.1'
+__version__ = '0.2.9'
 
 
 class GAFF():
@@ -84,6 +85,8 @@ class GAFF():
             Chem.rdmolops.Kekulize(mol, clearAromaticFlags=True)
             Chem.rdmolops.SetAromaticity(mol, model=Chem.rdmolops.AromaticityModel.AROMATICITY_MDL)
 
+        mol.SetProp('ff_name', str(self.name))
+        mol.SetProp('ff_class', str(self.ff_class))
         result = self.assign_ptypes(mol)
         if result: result = self.assign_btypes(mol)
         if result: result = self.assign_atypes(mol)
@@ -787,7 +790,7 @@ class GAFF():
     
         angle = utils.Angle(
             a=a, b=b, c=c,
-            ff=self.Angle_ff(
+            ff=ff_class.Angle_harmonic(
                 ff_type=self.param.at[at].tag,
                 k=self.param.at[at].k,
                 theta0=self.param.at[at].theta0
@@ -882,7 +885,7 @@ class GAFF():
 
         dihedral = utils.Dihedral(
             a=a, b=b, c=c, d=d,
-            ff=self.Dihedral_ff(
+            ff=ff_class.Dihedral_fourier(
                 ff_type=self.param.dt[dt].tag,
                 k=self.param.dt[dt].k,
                 d0=self.param.dt[dt].d,
@@ -976,7 +979,7 @@ class GAFF():
             
         improper = utils.Improper(
             a=a, b=b, c=c, d=d,
-            ff=self.Improper_ff(
+            ff=ff_class.Improper_cvff(
                 ff_type=self.param.it[it].tag,
                 k=self.param.it[it].k,
                 d0=self.param.it[it].d,
@@ -1048,6 +1051,7 @@ class GAFF():
         pass
 
 
+    ## Backward compatibility
     class Angle_ff():
         """
             GAFF.Angle_ff() object
@@ -1057,6 +1061,14 @@ class GAFF():
             self.k = k
             self.theta0 = theta0
             self.theta0_rad = theta0*(np.pi/180)
+
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': float(self.k),
+                'theta0': float(self.theta0),
+            }
+            return dic
         
         
     class Dihedral_ff():
@@ -1071,6 +1083,16 @@ class GAFF():
             self.m = m
             self.n = np.array(n)
         
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': [float(x) for x in self.k],
+                'd0': [float(x) for x in self.d0],
+                'm': int(self.m),
+                'n': [int(x) for x in self.n],
+            }
+            return dic
+
         
     class Improper_ff():
         """
@@ -1082,4 +1104,12 @@ class GAFF():
             self.d0 = d0
             self.n = n
         
-        
+        def to_dict(self):
+            dic = {
+                'ff_type': str(self.type),
+                'k': float(self.k),
+                'd0': float(self.d0),
+                'n': int(self.n),
+            }
+            return dic
+

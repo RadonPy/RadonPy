@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2023. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -16,7 +16,7 @@ from rdkit import Geometry as Geom
 from ...core import poly, utils, calc, const
 from .. import lammps, preset
 
-__version__ = '0.2.7'
+__version__ = '0.2.9'
 
 
 class NEMD_MP(preset.Preset):
@@ -37,6 +37,7 @@ class NEMD_MP(preset.Preset):
         self.last_str = kwargs.get('last_str', '%snemd_TC-MP_%s_last.dump' % (prefix, axis))
         self.last_data = kwargs.get('last_data', '%snemd_TC-MP_%s_last.data' % (prefix, axis))
         self.pickle_file = kwargs.get('pickle_file', '%snemd_TC-MP_%s_last.pickle' % (prefix, axis))
+        self.json_file = kwargs.get('json_file', '%snemd_TC-MP_%s_last.json' % (prefix, axis))
 
 
     def exec(self, confId=0, step=5000000, time_step=0.2, temp=300.0,
@@ -104,6 +105,7 @@ class NEMD_MP(preset.Preset):
 
         setattr(self.mol, 'cell', utils.Cell(self.cell[0, 1], self.cell[0, 0], self.cell[1, 1], self.cell[1, 0], self.cell[2, 1], self.cell[2, 0]))
         self.mol = calc.mol_trans_in_cell(self.mol)
+        utils.MolToJSON(self.mol, os.path.join(self.save_dir, self.json_file))
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
 
         dt2 = datetime.datetime.now()
@@ -148,6 +150,10 @@ class NEMD_MP(preset.Preset):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
 
         in_strings += """
@@ -157,10 +163,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -720,7 +726,7 @@ class NEMD_MP_Analyze(lammps.Analyze):
         return TCdecomp, Jdecomp
 
 
-class NEMD_MP_Additional(preset.Preset):
+class NEMD_MP_Additional(NEMD_MP):
     def exec(self, confId=0, step=5000000, time_step=0.2, temp=300.0,
              decomp=False, step_decomp=500000, decomp_intermol=False,
              omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
@@ -777,6 +783,8 @@ class NEMD_MP_Additional(preset.Preset):
         setattr(self.mol, 'cell', utils.Cell(self.cell[0, 1], self.cell[0, 0], self.cell[1, 1], self.cell[1, 0], self.cell[2, 1], self.cell[2, 0]))
         self.mol = calc.mol_trans_in_cell(self.mol)
         utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
+        utils.MolToJSON(self.mol, os.path.join(self.save_dir, self.json_file))
+        utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
 
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete additional thermal conductive simulation (kinetic energy exchanging NEMD). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -816,6 +824,10 @@ class NEMD_MP_Additional(preset.Preset):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
 
         in_strings += """
@@ -825,10 +837,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -1087,6 +1099,7 @@ class NEMD_Langevin(preset.Preset):
         self.last_str = kwargs.get('last_str', '%snemd_TC-Langevin_%s_last.dump' % (prefix, axis))
         self.last_data = kwargs.get('last_data', '%snemd_TC-Langevin_%s_last.data' % (prefix, axis))
         self.pickle_file = kwargs.get('pickle_file', '%snemd_TC-Langevin_%s_last.pickle' % (prefix, axis))
+        self.json_file = kwargs.get('json_file', '%snemd_TC-Langevin_%s_last.json' % (prefix, axis))
 
 
     def exec(self, confId=0, step=10000000, time_step=0.2, h_temp=320.0, l_temp=280.0,
@@ -1157,6 +1170,7 @@ class NEMD_Langevin(preset.Preset):
         setattr(self.mol, 'cell', utils.Cell(self.cell[0, 1], self.cell[0, 0], self.cell[1, 1], self.cell[1, 0], self.cell[2, 1], self.cell[2, 0]))
         self.mol = calc.mol_trans_in_cell(self.mol)
         utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
+        utils.MolToJSON(self.mol, os.path.join(self.save_dir, self.json_file))
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
 
         dt2 = datetime.datetime.now()
@@ -1205,6 +1219,10 @@ class NEMD_Langevin(preset.Preset):
         in_strings += 'variable        pairst  string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1 string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2 string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst  string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst string %s\n' % (self.improper_style)
         in_strings += '##########################################################\n'
         in_strings += """
 
@@ -1214,10 +1232,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -1684,6 +1702,8 @@ class EMD_GK(preset.Preset):
         self.autocorr_file = kwargs.get('autocorr_file', 'autocorr_heatflux.profile')
         self.last_str = kwargs.get('last_str', 'emd_TC-GK_last.dump')
         self.last_data = kwargs.get('last_data', 'emd_TC-GK_last.data')
+        self.pickle_file = kwargs.get('pickle_file', 'emd_TC-GK_last.pickle')
+        self.json_file = kwargs.get('json_file', 'emd_TC-GK_last.json')
 
 
     def exec(self, confId=0, step=10000000, time_step=0.2, temp=300.0, hfsample=5, hfcorrlen=5000,
@@ -1736,6 +1756,7 @@ class EMD_GK(preset.Preset):
             self.mol.GetAtomWithIdx(i).SetDoubleProp('vz', self.vel[i, 2])
 
         self.mol = calc.mol_trans_in_cell(self.mol, confId=confId)
+        utils.MolToJSON(self.mol, os.path.join(self.save_dir, self.json_file))
         utils.pickle_dump(self.mol, os.path.join(self.save_dir, self.pickle_file))
 
         dt2 = datetime.datetime.now()
@@ -1775,6 +1796,10 @@ class EMD_GK(preset.Preset):
         in_strings += 'variable        pairst    string %s\n' % (self.pair_style)
         in_strings += 'variable        cutoff1   string %s\n' % (self.cutoff_in)
         in_strings += 'variable        cutoff2   string %s\n' % (self.cutoff_out)
+        in_strings += 'variable        bondst    string %s\n' % (self.bond_style)
+        in_strings += 'variable        anglest   string %s\n' % (self.angle_style)
+        in_strings += 'variable        dihedst   string %s\n' % (self.dihedral_style)
+        in_strings += 'variable        improst   string %s\n' % (self.improper_style)
         in_strings += """
 
 variable        NA     equal 6.02214076*1.0e23
@@ -1791,10 +1816,10 @@ units           real
 atom_style      full
 boundary        p p p
 
-bond_style      harmonic  
-angle_style     harmonic
-dihedral_style  fourier
-improper_style  cvff
+bond_style      ${bondst}  
+angle_style     ${anglest}
+dihedral_style  ${dihedst}
+improper_style  ${improst}
 
 pair_style      ${pairst} ${cutoff1} ${cutoff2}
 pair_modify     mix arithmetic
@@ -1878,10 +1903,16 @@ def restore(save_dir, **kwargs):
     method = kwargs.get('method', 'TC-MP')
     axis = kwargs.get('axis', 'x')
     if method == 'TC-GK':
+        jsn = 'emd_TC-GK_last.json'
         pkl = 'emd_TC-GK_last.pickle'
     else:
+        jsn = 'nemd_%s_%s_last.json' % (method, axis)
         pkl = 'nemd_%s_%s_last.pickle' % (method, axis)
-    mol = utils.pickle_load(os.path.join(save_dir, pkl))
+
+    if os.path.isfile(os.path.join(save_dir, jsn)):
+        mol = utils.JSONToMol(os.path.join(save_dir, jsn))
+    else:
+        mol = utils.pickle_load(os.path.join(save_dir, pkl))
     return mol
 
 

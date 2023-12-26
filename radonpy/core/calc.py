@@ -24,7 +24,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.6'
+__version__ = '0.2.9'
 
 MD_avail = True
 try:
@@ -32,11 +32,11 @@ try:
 except ImportError:
     MD_avail = False
 
-psi4_avail = True
+qm_avail = True
 try:
-    from ..sim.psi4_wrapper import Psi4w
+    from ..sim.qm_wrapper import QMw
 except ImportError:
-    psi4_avail = False
+    qm_avail = False
 
 if const.tqdm_disable:
     tqdm = utils.tqdm_stub
@@ -343,7 +343,7 @@ def get_num_radicals(mol):
     return nr
 
 
-def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge',
+def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, tmp_dir=None, log_name='charge', qm_solver='psi4',
     opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'}, 
     geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO',
     charge_method='HF', charge_basis='6-31G(d)', charge_basis_gen={'Br':'6-31G(d)', 'I': 'lanl2dz'},
@@ -384,7 +384,7 @@ def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, t
             p.SetDoubleProp('AtomicCharge', float(p.GetProp('_GasteigerCharge')))
 
     elif charge in ['RESP', 'ESP', 'Mulliken', 'Lowdin']:
-        if not psi4_avail:
+        if not qm_avail:
             utils.radon_print('Cannot import psi4_wrapper. You can use psi4_wrapper by "conda install -c psi4 psi4 resp dftd3"', level=3)
             return False
 
@@ -393,8 +393,8 @@ def assign_charges(mol, charge='gasteiger', confId=0, opt=True, work_dir=None, t
         if type(total_multiplicity) is int:
             kwargs['multiplicity'] = total_multiplicity
 
-        psi4mol = Psi4w(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
-                        name=log_name, **kwargs)
+        psi4mol = QMw(mol, confId=confId, work_dir=work_dir, tmp_dir=tmp_dir, qm_solver=qm_solver, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                      name=log_name, **kwargs)
         if opt:
             psi4mol.optimize(geom_iter=geom_iter, geom_conv=geom_conv, geom_algorithm=geom_algorithm)
             if psi4mol.error_flag: return False
@@ -770,7 +770,7 @@ def fractional_free_volume(mol, confId=0, gridSpacing=0.2, method='grid'):
 
 
 def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmsthresh=0.5, tfdthresh=0.02, clustering='TFD',
-        opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
+        qm_solver='psi4', opt_method='wb97m-d3bj', opt_basis='6-31G(d,p)', opt_basis_gen={'Br': '6-31G(d,p)', 'I': 'lanl2dz'},
         geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', log_name='mol', solver='lammps', solver_path=None, work_dir=None, tmp_dir=None,
         etkdg_omp=-1, psi4_omp=-1, psi4_mp=0, omp=1, mpi=-1, gpu=0, mm_mp=0, memory=1000,
         total_charge=None, total_multiplicity=None, **kwargs):
@@ -993,7 +993,7 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
     # DFT optimization of conformers
     if dft_nconf > 0:
         opt_success = 0
-        if not psi4_avail:
+        if not qm_avail:
             utils.radon_print('Cannot import psi4_wrapper. You can use psi4_wrapper by "conda install -c psi4 psi4 resp dftd3"', level=3)
             Chem.SanitizeMol(mol_c)
             return mol_c, re_energy
@@ -1004,8 +1004,8 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
             kwargs['multiplicity'] = total_multiplicity
 
         if dft_nconf > nconf_new: dft_nconf = nconf_new
-        psi4mol = Psi4w(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
-                        memory=memory, **kwargs)
+        psi4mol = QMw(mol_c, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, qm_solver=qm_solver, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+                      memory=memory, **kwargs)
 
         utils.radon_print('Start optimization of %i conformers by DFT level.' % dft_nconf, level=1)
 
@@ -1013,7 +1013,7 @@ def conformation_search(mol, ff=None, nconf=1000, dft_nconf=0, etkdg_ver=2, rmst
         if (psi4_mp > 0 or const.mpi4py_avail) and dft_nconf > 1:
             utils.picklable(mol_c)
             c = utils.picklable_const()
-            args = [(mol_c, i, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name,
+            args = [(mol_c, i, work_dir, tmp_dir, psi4_omp, qm_solver, opt_method, opt_basis, opt_basis_gen, log_name,
                     geom_iter, geom_conv, geom_algorithm, memory, kwargs, c) for i in range(dft_nconf)]
 
             # mpi4py
@@ -1135,14 +1135,14 @@ def _conf_search_rdkit_worker(args):
 
 
 def _conf_search_psi4_worker(args):
-    mol, confId, work_dir, tmp_dir, psi4_omp, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs, c = args
+    mol, confId, work_dir, tmp_dir, psi4_omp, qm_solver, opt_method, opt_basis, opt_basis_gen, log_name, geom_iter, geom_conv, geom_algorithm, memory, kwargs, c = args
     utils.restore_const(c)
 
     utils.radon_print('Worker process %i start on %s. PID: %i' % (confId, socket.gethostname(), os.getpid()))
 
     error_flag = False
     utils.restore_picklable(mol)
-    psi4mol = Psi4w(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
+    psi4mol = QMw(mol, work_dir=work_dir, tmp_dir=tmp_dir, omp=psi4_omp, qm_solver=qm_solver, method=opt_method, basis=opt_basis, basis_gen=opt_basis_gen,
                     memory=memory, **kwargs)
     psi4mol.confId = confId
     psi4mol.name = '%s_conf_search_%i' % (log_name, confId)

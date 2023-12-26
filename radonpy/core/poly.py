@@ -18,7 +18,7 @@ from rdkit import Geometry as Geom
 from rdkit import RDLogger
 from . import calc, const, utils
 
-__version__ = '0.2.6'
+__version__ = '0.2.9'
 
 MD_avail = True
 try:
@@ -273,7 +273,36 @@ def combine_mols(mol1, mol2, res_name_1='RU0', res_name_2='RU0'):
     setattr(mol, 'angles', angles)
     setattr(mol, 'dihedrals', dihedrals)
     setattr(mol, 'impropers', impropers)
-    if cell is not None: setattr(mol, 'cell', cell)
+    if mol1.HasProp('pair_style'):
+        mol.SetProp('pair_style', mol1.GetProp('pair_style'))
+    elif mol2.HasProp('pair_style'):
+        mol.SetProp('pair_style', mol2.GetProp('pair_style'))
+    if mol1.HasProp('bond_style'):
+        mol.SetProp('bond_style', mol1.GetProp('bond_style'))
+    elif mol2.HasProp('bond_style'):
+        mol.SetProp('bond_style', mol2.GetProp('bond_style'))
+    if mol1.HasProp('angle_style'):
+        mol.SetProp('angle_style', mol1.GetProp('angle_style'))
+    elif mol2.HasProp('angle_style'):
+        mol.SetProp('angle_style', mol2.GetProp('angle_style'))
+    if mol1.HasProp('dihedral_style'):
+        mol.SetProp('dihedral_style', mol1.GetProp('dihedral_style'))
+    elif mol2.HasProp('dihedral_style'):
+        mol.SetProp('dihedral_style', mol2.GetProp('dihedral_style'))
+    if mol1.HasProp('improper_style'):
+        mol.SetProp('improper_style', mol1.GetProp('improper_style'))
+    elif mol2.HasProp('improper_style'):
+        mol.SetProp('improper_style', mol2.GetProp('improper_style'))
+    if mol1.HasProp('ff_name'):
+        mol.SetProp('ff_name', mol1.GetProp('ff_name'))
+    elif mol2.HasProp('ff_name'):
+        mol.SetProp('ff_name', mol2.GetProp('ff_name'))
+    if mol1.HasProp('ff_class'):
+        mol.SetProp('ff_class', mol1.GetProp('ff_class'))
+    elif mol2.HasProp('ff_class'):
+        mol.SetProp('ff_class', mol2.GetProp('ff_class'))
+    if cell is not None:
+        setattr(mol, 'cell', cell)
 
     return mol
 
