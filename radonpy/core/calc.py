@@ -24,7 +24,7 @@ from rdkit import Geometry as Geom
 from rdkit.ML.Cluster import Butina
 from . import utils, const
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 
 MD_avail = True
 try:
@@ -301,9 +301,9 @@ def mol_trans_in_cell(mol, confId=0):
 
         mol_coord = np.array(mol_coord)
         mol_coord_center = np.mean(mol_coord, axis=0)
-        x_shift = int((mol_coord_center[0] - cell_center[0]) / mol_c.cell.dx + 0.5) * mol_c.cell.dx
-        y_shift = int((mol_coord_center[1] - cell_center[1]) / mol_c.cell.dy + 0.5) * mol_c.cell.dy
-        z_shift = int((mol_coord_center[2] - cell_center[2]) / mol_c.cell.dz + 0.5) * mol_c.cell.dz
+        x_shift = round((mol_coord_center[0] - cell_center[0]) / mol_c.cell.dx) * mol_c.cell.dx
+        y_shift = round((mol_coord_center[1] - cell_center[1]) / mol_c.cell.dy) * mol_c.cell.dy
+        z_shift = round((mol_coord_center[2] - cell_center[2]) / mol_c.cell.dz) * mol_c.cell.dz
 
         for j, atom in enumerate(mol_c.GetAtoms()):
             if i == atom.GetIntProp('mol_id'):

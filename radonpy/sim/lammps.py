@@ -1,4 +1,4 @@
-#  Copyright (c) 2023. RadonPy developers. All rights reserved.
+#  Copyright (c) 2024. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -18,7 +18,7 @@ from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 from ..ff import ff_class
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 
 mdtraj_avail = True
 try:
@@ -196,7 +196,7 @@ class LAMMPS():
                 % (self.get_name, input_file, md.dat_file, cp.returncode), level=3)
             return cp.returncode
 
-        if isinstance(mol, Chem.Mol):
+        if isinstance(mol, Chem.Mol) and last_str is not None:
             uwstr, wstr, cell, vel, _ = self.read_traj_simple(os.path.join(self.work_dir, last_str))
 
             for i in range(mol.GetNumAtoms()):
@@ -383,7 +383,7 @@ class LAMMPS():
         indata.append('neigh_modify %s' % (md.neigh_modify))
         indata.append('read_data %s' % (md.dat_file))
         indata.append('')
-        indata.append('thermo_style %s' % (md.thermo_style))
+        indata.append('thermo_style custom %s' % ' '.join(md.thermo_style))
         indata.append('thermo_modify flush yes')
         indata.append('thermo %i' % (md.thermo_freq))
 
@@ -645,10 +645,19 @@ class LAMMPS():
                     indata.append('fix momentum%i all momentum 1000 linear 1 1 1 rescale' % (i+1))
                     unfix.append('unfix momentum%i' % (i+1))
 
-
+                # Update thermo_style
                 indata.append('')
-                indata.append('run %i' % (wf.step))
-                indata.append('unfix md%i' % (i+1))
+                indata.append('# Update thermo_style')
+                self.update_thermo_style(md, wf, i, indata, unfix)
+
+                if wf.rerun:
+                    indata.append('')
+                    indata.append('rerun %s %s' % (wf.rerun_dump, wf.rerun_keyword))
+                else:
+                    indata.append('')
+                    indata.append('run %i' % (wf.step))
+                    
+                indata.append('unfix md%i' % (i+1))    
                 indata.extend(unfix)
                 if len(wf.add_f) > 0:
                     indata.extend(wf.add_f)
@@ -658,7 +667,8 @@ class LAMMPS():
             indata.append('run 0')
 
         indata.append('')
-        indata.append('write_dump all custom %s id x y z xu yu zu vx vy vz fx fy fz modify sort id' % (md.outstr))
+        if md.outstr:
+            indata.append('write_dump all custom %s id x y z xu yu zu vx vy vz fx fy fz modify sort id' % (md.outstr))
         if md.write_data:
             indata.append('write_data %s' % (md.write_data))
 
@@ -680,6 +690,15 @@ class LAMMPS():
                 os.fsync(fh.fileno())
 
         return in_file
+
+
+    def update_thermo_style(self, md, wf, i, indata, unfix):
+        indata.append('thermo_style custom %s' % ' '.join([*md.thermo_style, *wf.thermo_style]))
+        indata.append('thermo_modify flush yes')
+        if wf.thermo_freq is not None:
+            indata.append('thermo %i' % (wf.thermo_freq))
+        else:
+            indata.append('thermo %i' % (md.thermo_freq))
 
 
     def make_input_drude(self, md, indata):
@@ -826,10 +845,10 @@ class LAMMPS():
         if not nounfix:
             unfix.append('unfix EF%i' % (i+1))
 
-        md.thermo_style += ' v_efac'
-        indata.append('thermo_style %s' % (md.thermo_style))
-        indata.append('thermo_modify flush yes')
-        indata.append('thermo %i' % (md.thermo_freq))
+        wf.thermo_style += ['v_efac']
+        # indata.append('thermo_style %s' % (md.thermo_style))
+        # indata.append('thermo_modify flush yes')
+        # indata.append('thermo %i' % (md.thermo_freq))
 
         return indata, unfix
 
@@ -843,10 +862,10 @@ class LAMMPS():
 
         unfix.append('uncompute dipole%i' % (i+1))
 
-        md.thermo_style += ' v_mux v_muy v_muz v_mu'
-        indata.append('thermo_style %s' % (md.thermo_style))
-        indata.append('thermo_modify flush yes')
-        indata.append('thermo %i' % (md.thermo_freq))
+        wf.thermo_style += ['v_mux', 'v_muy', 'v_muz', 'v_mu']
+        # indata.append('thermo_style %s' % (md.thermo_style))
+        # indata.append('thermo_modify flush yes')
+        # indata.append('thermo %i' % (md.thermo_freq))
 
         return indata, unfix
 
@@ -873,10 +892,10 @@ class LAMMPS():
         unfix.append('unfix msd%i' % (i+1))
         unfix.append('uncompute msd%i' % (i+1))
 
-        md.thermo_style += ' v_msd'
-        indata.append('thermo_style %s' % (md.thermo_style))
-        indata.append('thermo_modify flush yes')
-        indata.append('thermo %i' % (md.thermo_freq))
+        wf.thermo_style += ['v_msd']
+        # indata.append('thermo_style %s' % (md.thermo_style))
+        # indata.append('thermo_modify flush yes')
+        # indata.append('thermo %i' % (md.thermo_freq))
 
         return indata, unfix
 
@@ -898,11 +917,12 @@ class LAMMPS():
         var_str = ' '.join(wf.timeave_var)
         indata.append('fix %s all ave/time %i %i %i %s' % (wf.timeave_name, wf.timeave_nevery, wf.timeave_nfreq, wf.timeave_nstep, var_str))
 
-        fix_name = ' '.join(['f_%s[%i]' % (wf.timeave_name, (j+1)) for j in range(len(wf.timeave_var))])
-        md.thermo_style += ' %s' % fix_name
-        indata.append('thermo_style %s' % (md.thermo_style))
-        indata.append('thermo_modify flush yes')
-        indata.append('thermo %i' % (md.thermo_freq))
+        wf.thermo_style += ['f_%s[%i]' % (wf.timeave_name, (j+1)) for j in range(len(wf.timeave_var))]
+        # fix_name = ' '.join(['f_%s[%i]' % (wf.timeave_name, (j+1)) for j in range(len(wf.timeave_var))])
+        # md.thermo_style += ' %s' % fix_name
+        # indata.append('thermo_style %s' % (md.thermo_style))
+        # indata.append('thermo_modify flush yes')
+        # indata.append('thermo %i' % (md.thermo_freq))
 
         return indata, unfix
 
@@ -1100,8 +1120,8 @@ class LAMMPS():
 ###########################################
 
 class Analyze():
-    def __init__(self, log_file='radon_md.log', **kwargs):
-        self.dfs = self.read_log(log_file)
+    def __init__(self, log_file='radon_md.log', ignore_log=[], **kwargs):
+        self.dfs = self.read_log(log_file, ignore_log=ignore_log)
         self.log_file = log_file
         self.in_file = kwargs.get('in_file', 'radon_md.dump')
         self.dat_file = kwargs.get('dat_file', 'radon_md_lmp.data')
@@ -1156,7 +1176,7 @@ class Analyze():
         self.volexp_sma_sd_crit = kwargs.get('volexp_sma_sd_crit', None)
 
 
-    def read_log(self, log_file):
+    def read_log(self, log_file, ignore_log=[]):
         """
         lammps.Analyze.read_log
 
@@ -1173,7 +1193,7 @@ class Analyze():
             log_data = [s.replace('\n', '').replace('\r', '') for s in fh.readlines()]
 
         try:
-            dfs = self.parse_thermo(log_data)
+            dfs = self.parse_thermo(log_data, ignore_log=ignore_log)
             self.dfs = dfs
         except Exception as e:
             self.dfs = dfs = None
@@ -1183,7 +1203,7 @@ class Analyze():
 
 
     @classmethod
-    def parse_thermo(cls, log_data):
+    def parse_thermo(cls, log_data, ignore_log=[]):
         """
         lammps.Analyze.parse_thermo
 
@@ -1217,6 +1237,13 @@ class Analyze():
                 data = []
             elif d_flag == 2:
                 try:
+                    ignore_flag = False
+                    for ignore_line in ignore_log:
+                        if ignore_line in line:
+                            ignore_flag = True
+                            break
+                    if ignore_flag:
+                        continue
                     data.append([float(f) for f in line.split()])
                 except ValueError as e:
                     utils.radon_print('Can not parse thermodynamic data. %s; Skip to parse the data of %i step.' % (e, len(dfs)), level=1)
@@ -2778,7 +2805,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             #     string += '\t%f\t%i\t%f' % (d_coeff[i][j*3+1], d_coeff[i][j*3+2], d_coeff[i][j*3+3])
             # string += '\t# %s' % (dtype)
             # lines.append(string)
-            c = '\t'.join([ '%f' % x if type(x) is float else '%i' % x for x in d_coeff[i]])
+            c = '\t'.join([ '%f' % x if isinstance(x, float) else '%i' % x for x in d_coeff[i]])
             lines.append('%5d\t%s\t# %s' % (i+1, c, dtype))
 
 
@@ -2789,7 +2816,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
 
         for i, itype in enumerate(unique_itype):
             #lines.append('%5d\t%f\t%i\t%i\t# %s' % (i+1, i_coeff[i][0], i_coeff[i][1], i_coeff[i][2], itype))
-            c = '\t'.join([ '%f' % x if type(x) is float else '%i' % x for x in i_coeff[i] ])
+            c = '\t'.join([ '%f' % x if isinstance(x, float) else '%i' % x for x in i_coeff[i] ])
             lines.append('%5d\t%s\t# %s' % (i+1, c, itype))
 
 

@@ -18,7 +18,7 @@ from rdkit.Chem import AllChem
 from . import const
 from ..ff import ff_class
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 
 
 class Angle():
@@ -780,89 +780,93 @@ def MolToJSON_dict(mol, useRDKitExtensions=False):
  
     # angle
     if hasattr(mol, 'angles'):
-        # if len(mol.angles) > 0 and hasattr(mol.angles[list(mol.angles.keys())[0]], 'to_dict'):
+        if len(mol.angles) > 0 and hasattr(mol.angles[0], 'to_dict'):
             angle_prop = [ang.to_dict() for ang in mol.angles]
             radonpy_ext['angles'] = angle_prop
-        # else:
-        #     angle_prop = []
-        #     for key, ang in mol.angles.items():
-        #         dic = {
-        #             'a': ang.a,
-        #             'b': ang.b,
-        #             'c': ang.c,
-        #             'ff': {
-        #                 'ff_type': ang.ff.type,
-        #                 'k': ang.ff.k,
-        #                 'theta0': ang.ff.theta0,
-        #             }
-        #         }
-        #         angle_prop.append(dic)
+        else:
+            angle_prop = []
+            for ang in mol.angles:
+                dic = {
+                    'a': int(ang.a),
+                    'b': int(ang.b),
+                    'c': int(ang.c),
+                    'ff': {
+                        'ff_type': str(ang.ff.type),
+                        'k': float(ang.ff.k),
+                        'theta0': float(ang.ff.theta0),
+                    }
+                }
+                angle_prop.append(dic)
+            radonpy_ext['angles'] = angle_prop
     else:
         angle_prop = []
     
     # dihedral
     if hasattr(mol, 'dihedrals'):
-        # if len(mol.dihedrals) > 0 and hasattr(mol.dihedrals[list(mol.dihedrals.keys())[0]], 'to_dict'):
+        if len(mol.dihedrals) > 0 and hasattr(mol.dihedrals[0], 'to_dict'):
             dihedral_prop = [dih.to_dict() for dih in mol.dihedrals]
             radonpy_ext['dihedrals'] = dihedral_prop
-        # else:
-        #     dihedral_prop = []
-        #     for key, dih in mol.dihedrals.items():
-        #         dic = {
-        #             'a': dih.a,
-        #             'b': dih.b,
-        #             'c': dih.c,
-        #             'd': dih.d,
-        #             'ff': {
-        #                 'ff_type': dih.ff.type,
-        #                 'k': dih.ff.k,
-        #                 'd0': dih.ff.d0,
-        #                 'm': dih.ff.m,
-        #                 'n': dih.ff.n,
-        #             }
-        #         }
-        #         dihedral_prop.append(dic)
+        else:
+            dihedral_prop = []
+            for dih in mol.dihedrals:
+                dic = {
+                    'a': int(dih.a),
+                    'b': int(dih.b),
+                    'c': int(dih.c),
+                    'd': int(dih.d),
+                    'ff': {
+                        'ff_type': str(dih.ff.type),
+                        'k': list([float(x) for x in dih.ff.k]),
+                        'd0': list([float(x) for x in dih.ff.d0]),
+                        'm': int(dih.ff.m),
+                        'n': list([int(x) for x in dih.ff.n]),
+                    }
+                }
+                dihedral_prop.append(dic)
+            radonpy_ext['dihedrals'] = dihedral_prop
     else:
         dihedral_prop = []
 
     # improper
     if hasattr(mol, 'impropers'):
-        # if len(mol.impropers) > 0 and hasattr(mol.impropers[list(mol.impropers.keys())[0]], 'to_dict'):
+        if len(mol.impropers) > 0 and hasattr(mol.impropers[0], 'to_dict'):
             improper_prop = [imp.to_dict() for imp in mol.impropers]
             radonpy_ext['impropers'] = improper_prop
-        # else:
-        #     improper_prop = []
-        #     for key, imp in mol.impropers.items():
-        #         dic = {
-        #             'a': imp.a,
-        #             'b': imp.b,
-        #             'c': imp.c,
-        #             'd': imp.d,
-        #             'ff': {
-        #                 'ff_type': imp.ff.type,
-        #                 'k': imp.ff.k,
-        #                 'd0': imp.ff.d0,
-        #                 'n': imp.ff.n,
-        #             }
-        #         }
-        #         improper_prop.append(dic)
+        else:
+            improper_prop = []
+            for imp in mol.impropers:
+                dic = {
+                    'a': int(imp.a),
+                    'b': int(imp.b),
+                    'c': int(imp.c),
+                    'd': int(imp.d),
+                    'ff': {
+                        'ff_type': str(imp.ff.type),
+                        'k': float(imp.ff.k),
+                        'd0': int(imp.ff.d0),
+                        'n': int(imp.ff.n),
+                    }
+                }
+                improper_prop.append(dic)
+            radonpy_ext['impropers'] = improper_prop
     else:
         improper_prop = []
 
     # cell
     if hasattr(mol, 'cell'):
-        # if hasattr(mol.cell, 'to_dict'):
+        if hasattr(mol.cell, 'to_dict'):
             cell_prop = mol.cell.to_dict()
             radonpy_ext['cell'] = cell_prop
-        # else:
-        #     cell_prop = {
-        #         'xhi': mol.cell.xhi,
-        #         'xlo': mol.cell.xlo,
-        #         'yhi': mol.cell.yhi,
-        #         'ylo': mol.cell.ylo,
-        #         'zhi': mol.cell.zhi,
-        #         'zlo': mol.cell.zlo,
-        #     }
+        else:
+            cell_prop = {
+                'xhi': float(mol.cell.xhi),
+                'xlo': float(mol.cell.xlo),
+                'yhi': float(mol.cell.yhi),
+                'ylo': float(mol.cell.ylo),
+                'zhi': float(mol.cell.zhi),
+                'zlo': float(mol.cell.zlo),
+            }
+            radonpy_ext['cell'] = cell_prop
 
     json_dict['molecules'][0]['extensions'].append(radonpy_ext)
 
@@ -889,6 +893,11 @@ def JSONToMol_dict(json_dict):
             radonpy_ext = ext
     if radonpy_ext is None:
         radon_print('RadonPy extention data was not found in JSON file.', level=3)
+
+    # Avoiding bug in RDKit
+    for b in json_dict['molecules'][0]['bonds']:
+        if 'stereo' in b and 'stereoAtoms' not in b:
+            b['stereo'] = 'either'
 
     mol = Chem.rdMolInterchange.JSONToMols(json.dumps(json_dict))[0]
     Chem.SanitizeMol(mol)
@@ -1136,7 +1145,8 @@ def pickle_load(path):
     try:
         with open(path, mode='rb') as f:
             mol = pickle.load(f)
-    except:
+    except Exception as e:
+        radon_print('Cannot load pickle file %s. %s' % (path, e), level=2)
         return None
     return mol
 
