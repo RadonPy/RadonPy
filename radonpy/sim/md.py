@@ -1,4 +1,4 @@
-#  Copyright (c) 2023. RadonPy developers. All rights reserved.
+#  Copyright (c) 2024. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -12,7 +12,7 @@ from rdkit import Geometry as Geom
 from .md_wrapper import MD_solver, MD_analyzer
 from ..core import calc, utils
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 
 
 class MD():
@@ -34,7 +34,10 @@ class MD():
         self.rst = kwargs.get('rst', True)
         self.rst_freq = kwargs.get('rst_freq', 10000)
         self.thermo_freq = kwargs.get('thermo_freq', 1000)
-        self.thermo_style = kwargs.get('thermo_style', 'custom step time temp press enthalpy etotal ke pe ebond eangle edihed eimp evdwl ecoul elong etail vol lx ly lz density pxx pyy pzz pxy pxz pyz')
+#        self.thermo_style = kwargs.get('thermo_style', 'custom step time temp press enthalpy etotal ke pe ebond eangle edihed eimp evdwl ecoul elong etail vol lx ly lz density pxx pyy pzz pxy pxz pyz')
+        self.thermo_style = kwargs.get('thermo_style', ['step', 'time', 'temp', 'press', 'enthalpy', 'etotal', 'ke', 'pe', 'ebond', 'eangle',
+                                                        'edihed', 'eimp', 'evdwl', 'ecoul', 'elong', 'etail', 'vol', 'lx', 'ly', 'lz',
+                                                        'density', 'pxx', 'pyy', 'pzz', 'pxy', 'pxz', 'pyz'])
         self.boundary = kwargs.get('boundary', 'p p p')
         self.pbc = kwargs.get('pbc', True)
         self.units = kwargs.get('units', 'real')
@@ -183,6 +186,9 @@ class Dynamics():
         self.momentum = kwargs.get('momentum', False)
         self.variable = kwargs.get('variable', False)
         self.timeave = kwargs.get('timeave', False)
+        self.thermo_style = kwargs.get('thermo_style', [])
+        self.thermo_freq = kwargs.get('thermo_freq', None)
+        self.rerun = kwargs.get('rerun', False)
 
         self.add = kwargs.get('add', [])
         self.add_f = kwargs.get('add_f', [])
@@ -267,6 +273,13 @@ class Dynamics():
         return False
 
 
+    def add_rerun(self, dump_file, keyword='dump x y z ix iy iz vx vy vz'):
+        self.rerun = True
+        self.rerun_dump = dump_file
+        self.rerun_keyword = keyword
+        return False
+        
+
     def add_user(self, strings):
         self.add.append(strings)
         return False
@@ -302,7 +315,7 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol)
     if not hasattr(mol, 'cell'):
         md.pbc = False
         calc.centering_mol(mol, confId=confId)

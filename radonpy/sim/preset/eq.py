@@ -15,7 +15,7 @@ from ...core import calc, const, utils
 from .. import lammps, preset
 from ..md import MD
 
-__version__ = '0.2.9'
+__version__ = '0.2.10'
 
 
 class Equilibration(preset.Preset):
@@ -220,22 +220,24 @@ class Equilibration(preset.Preset):
         return md
 
 
-    def analyze(self):
+    def analyze(self, ignore_log=[], **kwargs):
 
         analy = Equilibration_analyze(
             log_file  = os.path.join(self.work_dir, self.log_file),
             traj_file = os.path.join(self.work_dir, self.xtc_file),
             pdb_file  = os.path.join(self.work_dir, self.pdb_file),
             dat_file  = os.path.join(self.work_dir, self.dat_file),
-            rg_file   = os.path.join(self.work_dir, self.rg_file)
+            rg_file   = os.path.join(self.work_dir, self.rg_file),
+            ignore_log = ignore_log,
+            **kwargs
         )
 
         return analy
 
 
 class Equilibration_analyze(lammps.Analyze):
-    def __init__(self, log_file='eq3.log', **kwargs):
-        super().__init__(log_file=log_file, **kwargs)
+    def __init__(self, log_file='eq3.log', ignore_log=[], **kwargs):
+        super().__init__(log_file=log_file, ignore_log=ignore_log, **kwargs)
         self.totene_sma_sd_crit = kwargs.get('totene_sma_sd_crit', 0.0005)
         self.kinene_sma_sd_crit = kwargs.get('kinene_sma_sd_crit', 0.0005)
         self.ebond_sma_sd_crit = kwargs.get('ebond_sma_sd_crit', 0.001)
