@@ -1187,7 +1187,7 @@ def mol_from_smiles(smiles, coord=True, version=2, ez='E', chiral='S'):
         etkdg = AllChem.ETKDG()
     etkdg.enforceChirality=True
     etkdg.useRandomCoords = False
-    etkdg.maxAttempts = 100
+    etkdg.maxIterations = 100
 
     try:
         mol = Chem.MolFromSmiles(smi)
