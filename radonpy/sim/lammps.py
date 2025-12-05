@@ -18,7 +18,7 @@ from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 from ..ff import ff_class
 
-__version__ = '0.2.10'
+__version__ = '0.2.11'
 
 mdtraj_avail = True
 try:
@@ -1220,6 +1220,9 @@ class Analyze():
         columns = []
         data = []
         dfs = []
+        
+        if ignore_log is None or len(ignore_log) == 0:
+            ignore_log = ['WARNING: Too many warnings:']
 
         for line in log_data:
             if line.find('Per MPI rank memory allocation') == 0 or line.find('Memory usage per processor') == 0:
@@ -2647,7 +2650,7 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
     i = 0
     if not mol.HasProp('bond_style'):
         utils.radon_print('bond_style is missing in MolToLAMMPSdataBlock. Assuming harmonic for bond_style.', level=2)
-        mol.GetProp('bond_style', 'harmonic')
+        mol.SetProp('bond_style', 'harmonic')
     for bond in mol.GetBonds():
         btype = bond.GetProp('ff_type')
         if btype in unique_btype:
@@ -2836,7 +2839,8 @@ def MolToLAMMPSdataBlock(mol, confId=0, velocity=True, temp=300, drude=False):
             lines.append('Velocities')
             lines.append('')
 
-            if not mol.GetAtomWithIdx(0).HasProp('vx'):
+            if not all([a.HasProp('vx') and a.HasProp('vy') and a.HasProp('vz')
+                        for a in mol.GetAtoms()]):
                 calc.set_velocity(mol, temp)
 
             for atom in mol.GetAtoms():
