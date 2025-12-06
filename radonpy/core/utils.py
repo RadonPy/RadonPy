@@ -1,4 +1,4 @@
-#  Copyright (c) 2023. RadonPy developers. All rights reserved.
+#  Copyright (c) 2025. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -18,7 +18,7 @@ from rdkit.Chem import AllChem
 from . import const
 from ..ff import ff_class
 
-__version__ = '0.2.10'
+__version__ = '0.2.11'
 
 
 class Angle():
@@ -1187,7 +1187,12 @@ def mol_from_smiles(smiles, coord=True, version=2, ez='E', chiral='S'):
         etkdg = AllChem.ETKDG()
     etkdg.enforceChirality=True
     etkdg.useRandomCoords = False
-    etkdg.maxAttempts = 100
+    if hasattr(etkdg, 'maxIterations'):
+        etkdg.maxIterations = 100
+    elif hasattr(etkdg, 'maxAttempts'):
+        etkdg.maxAttempts = 100
+    else:
+        radon_print('The installed RDKit version is not supported.', level=3)
 
     try:
         mol = Chem.MolFromSmiles(smi)

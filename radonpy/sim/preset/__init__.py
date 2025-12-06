@@ -1,4 +1,4 @@
-#  Copyright (c) 2022. RadonPy developers. All rights reserved.
+#  Copyright (c) 2025. RadonPy developers. All rights reserved.
 #  Use of this source code is governed by a BSD-3-style
 #  license that can be found in the LICENSE file.
 
@@ -49,10 +49,22 @@ class Preset():
                 self.pair_style_nonpbc = self.mol.GetProp('pair_style')
         if self.mol.HasProp('bond_style'):
             self.bond_style = self.mol.GetProp('bond_style')
+        else:
+            self.mol.SetProp('bond_style', 'harmonic')
+            self.bond_style = 'harmonic'
         if self.mol.HasProp('angle_style'):
             self.angle_style = self.mol.GetProp('angle_style')
+        else:
+            self.mol.SetProp('angle_style', 'harmonic')
+            self.angle_style = 'harmonic'
         if self.mol.HasProp('dihedral_style'):
             self.dihedral_style = self.mol.GetProp('dihedral_style')
+        else:
+            self.mol.SetProp('dihedral_style', 'fourier')
+            self.dihedral_style = 'fourier'
         if self.mol.HasProp('improper_style'):
             self.improper_style = self.mol.GetProp('improper_style')
+        else:
+            self.mol.SetProp('improper_style', 'cvff')
+            self.improper_style = 'cvff'
 
