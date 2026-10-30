@@ -152,7 +152,7 @@ def static_report(fixture, output, lammps_exec=None, gromacs_exec=None):
             runner = lammps if engine == 'lammps' else gromacs
             result = runner.single_point(molecule, work, executable)
         elapsed = time.perf_counter()-start
-        version = ((work/'version.txt').read_text() if engine == 'gromacs' else
+        version = ((work/'radon_gmx.json.gmx'/'version.txt').read_text() if engine == 'gromacs' else
                    lammps.lammps.LAMMPS(work_dir=str(work), solver_path=executable).get_version())
         results[label] = result
         np.savez(work/'result.npz', energy=result[0], force=result[1])

@@ -17,6 +17,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 from ..ff import ff_class
+from .profiles import apply_profile
 
 
 # CL Modification **************************************
@@ -48,6 +49,7 @@ class LAMMPS():
             'intel': False,
             'opt': False,
             'gpu': False,
+            'kokkos_gpu': False,
             'tally': False,
             'package_list': []
         }
@@ -93,7 +95,8 @@ class LAMMPS():
         if omp != 0 and not self.package['omp']:
             omp = 0
             utils.radon_print('OPENMP package is not available. Parallel number of OPENMP is changed to zero.', level=2)
-        if gpu != 0 and not self.package['gpu']:
+        kokkos = gpu != 0 and not self.package['gpu'] and self.package['kokkos_gpu']
+        if gpu != 0 and not self.package['gpu'] and not kokkos:
             gpu = 0
             utils.radon_print('GPU package is not available. Parallel number of GPU is changed to zero.', level=2)
 
@@ -133,7 +136,10 @@ class LAMMPS():
         else:
             os.environ['OMP_NUM_THREADS'] = str(omp)
 
-        if gpu > 0 and omp > 0:
+        if kokkos:
+            utils.radon_print('Using the KOKKOS package with %i GPU(s).' % gpu, level=1)
+            acc_str = '-k on g %i -sf kk' % gpu
+        elif gpu > 0 and omp > 0:
             acc_str = '-sf gpu -pk gpu %i omp %i' % (gpu, omp)
         elif gpu > 0:
             acc_str = '-sf gpu -pk gpu %i' % (gpu)
@@ -308,6 +314,9 @@ class LAMMPS():
         self.package['intel'] = check_intel
         self.package['opt'] = check_opt
         self.package['gpu'] = check_gpu
+        # KOKKOS built with a device backend can run on GPUs without the GPU package.
+        self.package['kokkos_gpu'] = 'KOKKOS' in package_list and any(
+            l.startswith('KOKKOS package API') and any(b in l for b in ('CUDA', 'HIP', 'SYCL')) for l in lines)
         self.package['tally'] = check_tally
         self.package['package_list'] = package_list
 
@@ -387,6 +396,8 @@ class LAMMPS():
         Return:
             Strings of content in input files
         """
+
+        apply_profile(md)
 
         for wf in md.wf:
             if hasattr(wf, 'bcreate') and wf.bcreate:
@@ -890,6 +901,21 @@ class LAMMPS():
                     elif wf.deform_axis == 'yz':
                         wf.px_start, wf.px_stop, wf.px_dump = wf.p_start, wf.p_stop, wf.p_dump
             
+            if wf.deform_remap:
+                indata[-1] += ' remap %s' % wf.deform_remap
+
+            unfix.append('unfix DEF%i' % (i+1))
+
+        elif wf.deform == 'erate':
+            if wf.deform_axis not in ('x', 'y', 'z'):
+                raise ValueError('Strain-rate deformation needs one axis')
+            # L(t) = L0 (1 + rate*t), rate in 1/fs.
+            indata.append('fix DEF%i all deform 1 %s erate %e units box' % (i+1, wf.deform_axis, wf.deform_rate))
+            if wf.ensemble in ['npt', 'nph'] and not wf.p_aniso:
+                wf.p_aniso = True
+                for axis in 'xyz'.replace(wf.deform_axis, ''):
+                    for key in ('start', 'stop', 'dump'):
+                        setattr(wf, 'p%s_%s' % (axis, key), getattr(wf, 'p_'+key))
             if wf.deform_remap:
                 indata[-1] += ' remap %s' % wf.deform_remap
 

@@ -32,12 +32,10 @@ def run(mol, work, executable, *, steps=0, time_step=.1, stride=1):
     if result.returncode:
         raise RuntimeError('LAMMPS failed; see %s' % work)
     frame = lammps.Analyze(log_file=str(work/options.log_file)).dfs[-1]
-    force = None
-    if steps == 0:
-        force = solver.read_traj_simple(str(work/options.outstr))[-1]
-    return frame, force
+    uwstr, _, _, velocity, force = solver.read_traj_simple(str(work/options.outstr))
+    return frame, (force if steps == 0 else None), (uwstr, velocity)
 
 
 def single_point(mol, work, executable):
-    frame, force = run(mol, work, executable)
+    frame, force, _ = run(mol, work, executable)
     return frame['PotEng'].iat[-1], force
