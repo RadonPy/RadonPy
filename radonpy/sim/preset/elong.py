@@ -526,10 +526,13 @@ class Deformation_Analysis():
     def log_extraction(self,):
 
         nprocess = 0
+        deform_process = None
         in_file = os.path.join(self.work_dir, self.in_file)
         with open(in_file, 'r') as f:
             lines = [s.replace(' \n', '').replace('\n', '').replace('\r', '').replace('*', ' ') for s in f.readlines()]
             for line in lines:
+                if line.startswith('fix DEF') and deform_process is None:
+                    deform_process = nprocess
                 if 'run ' in line:
                     line_data = [f for f in line.split(' ')]
                     nprocess += 1
@@ -546,8 +549,25 @@ class Deformation_Analysis():
                 whole_log = logs[i]
             else:
                 whole_log = pd.concat([whole_log, logs[i]], axis=0, ignore_index=True)
+        if 'deform_log' not in locals() and deform_process is not None:
+            # The per-stage thermo_style written by MD replaces the deformation stage's
+            # one, so v_EngStrain and v_GamNsurf are derived from the box and pressures.
+            deform_log = self._deform_variables(logs[init_id+deform_process])
+            whole_log = pd.concat(logs[init_id:], axis=0, ignore_index=True)
 
         return whole_log, deform_log
+
+
+    def _deform_variables(self, deform_log):
+        """The LAMMPS deformation variables v_EngStrain and v_GamNsurf from the box lengths and pressures."""
+        axis = self.deform_direction
+        lateral = [a for a in 'xyz' if a != axis]
+        length = deform_log['L%s' % axis]
+        deform_log['v_EngStrain'] = (length-length.iat[0])/length.iat[0]
+        deform_log['v_GamNsurf'] = length*(deform_log['P%s%s' % (axis, axis)]
+                                           - 0.5*(deform_log['P%s%s' % (lateral[0], lateral[0])]
+                                                  + deform_log['P%s%s' % (lateral[1], lateral[1])]))*101325/1e10*1e3
+        return deform_log
 
 
     def density_plot(self,):
