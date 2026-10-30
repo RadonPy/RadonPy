@@ -23,7 +23,7 @@ RUN git clone --depth 1 --branch stable_29Aug2024_update2 https://github.com/lam
        -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/opt/lammps \
        -DBUILD_MPI=OFF -DBUILD_OMP=ON -DPKG_MOLECULE=ON -DPKG_KSPACE=ON \
        -DPKG_RIGID=ON -DPKG_EXTRA-MOLECULE=ON -DPKG_EXTRA-DUMP=ON \
-       -DPKG_EXTRA-FIX=ON -DPKG_OPENMP=ON \
+       -DPKG_EXTRA-FIX=ON -DPKG_OPENMP=ON -DPKG_TALLY=ON \
     && cmake --build /tmp/lmp-build -j ${BUILD_JOBS} \
     && cmake --install /tmp/lmp-build \
     && rm -rf /tmp/lammps /tmp/lmp-build

@@ -43,6 +43,12 @@ if __name__ == '__main__':
     rst_pickle_file = os.environ.get('RadonPy_Pickle_File', None)
     tg_force = bool(os.environ.get('RadonPy_Tg_Force', False) == 'True')
     no_traj = bool(os.environ.get('RadonPy_No_Traj', False) == 'True')
+    # Same engine selection as 1_eq.py; GROMACS needs RadonPy_Barostat=C-rescale (or Parrinello-Rahman).
+    tg_options = {
+        'solver': os.environ.get('RadonPy_MD_Solver', 'lammps'),
+        'interaction_profile': os.environ.get('RadonPy_Interaction_Profile') or None,
+    }
+    tg_kwargs = {'barostat': os.environ['RadonPy_Barostat']} if os.environ.get('RadonPy_Barostat') else {}
 
     work_dir = './%s' % data['DBID']
     save_dir = os.path.join(work_dir, 'analyze')
@@ -58,8 +64,9 @@ if __name__ == '__main__':
     mol = io.load_md_obj(rst_json_file=rst_json_file, rst_pickle_file=rst_pickle_file)
 
     # Tg calculation
-    tgmd = tg.TGMD(mol, work_dir=work_dir, no_traj=no_traj)
-    mol, tg_results = tgmd.exec(temp=data['temp'], mpi=mpi, omp=omp, gpu=gpu, cooling_rate=8e3, intel=intel, opt=opt)
+    tgmd = tg.TGMD(mol, work_dir=work_dir, no_traj=no_traj, **tg_options)
+    mol, tg_results = tgmd.exec(temp=data['temp'], mpi=mpi, omp=omp, gpu=gpu, cooling_rate=8e3, intel=intel, opt=opt,
+                                **tg_kwargs)
 
     # Reload MD csv data
     data = io.load_md_csv(data)
