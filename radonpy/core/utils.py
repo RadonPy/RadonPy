@@ -8,6 +8,7 @@
 
 import os
 import re
+import sys
 import psutil
 from copy import deepcopy
 from itertools import permutations
@@ -288,13 +289,13 @@ def remove_atom(mol, idx, angle_fix=False):
                     continue
 
                 if max(ang_idx) < idx:
-                    key = '%i,%i,%i,%i' % (ang.a, ang.b, ang.c, ang.d)
+                    key = '%i,%i,%i' % (angle.a, angle.b, angle.c)
                     angles_copy[key] = angle
                 else:
                     idx_a = angle.a if angle.a < idx else angle.a-1
                     idx_b = angle.b if angle.b < idx else angle.b-1
                     idx_c = angle.c if angle.c < idx else angle.c-1
-                    key = '%i,%i,%i,%i' % (idx_a, idx_b, idx_c)
+                    key = '%i,%i,%i' % (idx_a, idx_b, idx_c)
                     angles_copy[key] = Angle(
                                             a=idx_a,
                                             b=idx_b,
