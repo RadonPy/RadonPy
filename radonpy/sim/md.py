@@ -18,6 +18,8 @@ __version__ = '1.0b2'
 class MD():
     def __init__(self, **kwargs):
         self.idx = kwargs.get('idx', None)
+        # None: RadonPy defaults in every engine; 'portable' is for development and validation.
+        self.interaction_profile = kwargs.get('interaction_profile', None)
 
         self.input_file = kwargs.get('input_file', 'radon_lmp.in' if self.idx is None else 'radon_lmp_%i.in' % self.idx)
         self.log_file = kwargs.get('log_file', 'radon_md.log' if self.idx is None else 'radon_md_%i.log' % self.idx)
@@ -109,6 +111,10 @@ class MD():
 
 
     def clear(self, work_dir):
+        if hasattr(self, '_gromacs_manifest'):
+            from .gromacs import clear_run
+            clear_run(self._gromacs_manifest)
+            return
         if os.path.exists(os.path.join(work_dir, self.input_file)):
             os.remove(os.path.join(work_dir, self.input_file))
 
@@ -118,7 +124,7 @@ class MD():
         if os.path.exists(os.path.join(work_dir, self.dat_file)):
             os.remove(os.path.join(work_dir, self.dat_file))
 
-        if os.path.exists(os.path.join(work_dir, self.dump_file)):
+        if self.dump_file is not None and os.path.exists(os.path.join(work_dir, self.dump_file)):
             os.remove(os.path.join(work_dir, self.dump_file))
 
         if self.xtc_file is not None:
@@ -163,6 +169,7 @@ class Dynamics():
         self.p_start = kwargs.get('p_start', 1.0)
         self.p_stop = kwargs.get('p_stop', 1.0)
         self.p_dump = kwargs.get('p_dump', 1000.0)
+        self.compressibility = kwargs.get('compressibility', 4.5e-5)  # GROMACS only (bar^-1)
         self.p_aniso = kwargs.get('p_aniso', False)
         self.px_start = kwargs.get('px_start', None)
         self.px_stop = kwargs.get('px_stop', None)
@@ -209,6 +216,7 @@ class Dynamics():
         self.deform_scale = kwargs.get('deform_scale', 2.0)
         self.deform_fin_lo = kwargs.get('deform_fin_lo', -10.0)
         self.deform_fin_hi = kwargs.get('deform_fin_hi', 10.0)
+        self.deform_rate = kwargs.get('deform_rate', 0.0)  # dftype 'erate': engineering strain rate (1/fs)
         self.deform_axis = axis
         self.deform_remap = kwargs.get('remap', 'v')
         self.deform_p_couple = kwargs.get('p_couple', False)
@@ -309,7 +317,7 @@ class Dynamics():
 
 
 def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
-                solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0):
+                solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None):
     """
     MD.quick_energy
 
@@ -321,9 +329,11 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
     Optional args:
         confId: Target conformer ID (int)
         force: Compute force (boolean)
-        solver: lammps (str) 
+        solver: lammps or gromacs (str) 
         solver_path: File path of solver (str) 
         work_dir: Path of work directory (str) 
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
 
     Returns:
         energy (float, kcal/mol)
@@ -333,7 +343,7 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol)
+    md = MD(idx=idx, mol=mol, interaction_profile=interaction_profile)
     if not hasattr(mol, 'cell'):
         md.pbc = False
         calc.centering_mol(mol, confId=confId)
@@ -348,20 +358,20 @@ def quick_energy(mol, confId=0, force=True, idx=None, tmp_clear=False,
         utils.radon_print('Error termination of %s. Return code = %i' % (sol.get_name, cp.returncode), level=3)
         return None
 
-    anal = MD_analyzer(log_file=os.path.join(sol.work_dir, md.log_file))
+    anal = MD_analyzer(md_analyzer=solver, log_file=os.path.join(sol.work_dir, md.log_file))
     energy = anal.dfs[-1]['PotEng'].iat[-1]
 
     if force:
         _, _, _, _, force = sol.read_traj_simple(os.path.join(sol.work_dir, md.outstr))
-        if tmp_clear: md.clear(work_dir)
+        if tmp_clear: md.clear(sol.work_dir)
         return energy, force
     else:
-        if tmp_clear: md.clear(work_dir)
+        if tmp_clear: md.clear(sol.work_dir)
         return energy
 
 
 def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_min
 
@@ -372,10 +382,12 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
     
     Optional args:
         confId: Target conformer ID (int)
-        min_style: cg, sd, hftn, fire (str)
-        solver: lammps (str) 
+        min_style: cg, sd, hftn, fire (str); gromacs supports cg and sd
+        solver: lammps or gromacs (str) 
         solver_path: File path of solver (str) 
         work_dir: Path of work directory (str) 
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
 
     Returns:
         energy (float, kcal/mol)
@@ -385,7 +397,7 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -402,17 +414,17 @@ def quick_min(mol, confId=0, min_style='cg', idx=None, tmp_clear=False,
 
     mol_copy = sol.run(md, mol=mol_copy, confId=confId, last_data=md.write_data, last_str=md.outstr, omp=omp, mpi=mpi, gpu=gpu)
 
-    anal = MD_analyzer(log_file=os.path.join(sol.work_dir, md.log_file))
+    anal = MD_analyzer(md_analyzer=solver, log_file=os.path.join(sol.work_dir, md.log_file))
     energy = anal.dfs[-1]['PotEng'].iat[-1]
     uwstr, wstr, _, _, _ = sol.read_traj_simple(os.path.join(sol.work_dir, md.outstr))
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, energy, uwstr
 
 
 def quick_min_all(mol, min_style='cg', tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=1, gpu=0, mp=1, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=1, gpu=0, mp=1, interaction_profile=None, **kwargs):
     """
     MD.quick_min_all
 
@@ -422,15 +434,30 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
         mol: RDKit Mol object
     
     Optional args:
-        min_style: cg, sd, hftn, fire (str)
-        solver: lammps (str) 
+        min_style: cg, sd, hftn, fire (str); gromacs supports cg and sd
+        solver: lammps or gromacs (str) 
         solver_path: File path of solver (str) 
         work_dir: Path of work directory (str) 
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, for development and validation); gromacs runs conformers sequentially
 
     Returns:
         energy (float, kcal/mol)
         Unwrapped coordinates (float, numpy.ndarray, angstrom)
     """
+    if solver.lower() == 'gromacs':
+        mol_copy = utils.deepcopy_mol(mol)
+        energies = []
+        uwstr_list = []
+        for conf in mol.GetConformers():
+            confId = conf.GetId()
+            mol_copy, energy, uwstr = quick_min(mol_copy, confId=confId, min_style=min_style, idx=confId,
+                tmp_clear=tmp_clear, solver=solver, solver_path=solver_path, work_dir=work_dir,
+                omp=omp, mpi=mpi, gpu=gpu, interaction_profile=interaction_profile, **kwargs)
+            energies.append(energy)
+            uwstr_list.append(uwstr)
+        return mol_copy, energies, uwstr_list
+
     mol_copy = utils.deepcopy_mol(mol)
     input_files = []
     md_list = []
@@ -442,7 +469,7 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
     for i in range(mol_copy.GetNumConformers()):
         sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=i)
 
-        md = MD(idx=i, mol=mol_copy)
+        md = MD(idx=i, mol=mol_copy, interaction_profile=interaction_profile)
         if not hasattr(mol_copy, 'cell'):
             md.pbc = False
             calc.centering_mol(mol_copy, confId=i)
@@ -494,13 +521,13 @@ def quick_min_all(mol, min_style='cg', tmp_clear=False,
                 energies.append(energy)
 
                 if tmp_clear:
-                    md.clear(work_dir)
+                    md.clear(sol.work_dir)
 
     return mol_copy, energies, uwstr_list
 
 
 def quick_rw(mol, confId=0, step=100, time_step=0.2, temp=700, limit=0.1, shake=False, idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_rw
 
@@ -524,7 +551,7 @@ def quick_rw(mol, confId=0, step=100, time_step=0.2, temp=700, limit=0.1, shake=
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -563,13 +590,13 @@ def quick_rw(mol, confId=0, step=100, time_step=0.2, temp=700, limit=0.1, shake=
     if hasattr(mol_copy, 'cell'):
         mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, uwstr
 
 
 def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_nve
 
@@ -584,9 +611,11 @@ def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, 
         time_step: Set timestep of MD (float or None, fs)
         limit: NVE limit (float)
         shake: Use SHAKE (boolean)
-        solver: lammps (str)
+        solver: lammps or gromacs (str)
         solver_path: File path of solver (str)
         work_dir: Path of work directory (str)
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
 
     Returns:
         Unwrapped coordinates (float, numpy.ndarray, angstrom)
@@ -595,7 +624,7 @@ def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, 
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -623,13 +652,13 @@ def quick_nve(mol, confId=0, step=2000, time_step=None, limit=0.0, shake=False, 
     if hasattr(mol_copy, 'cell'):
         mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, uwstr
 
 
 def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None, shake=False, idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_nvt
 
@@ -645,10 +674,13 @@ def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
         temp: Initial temperature (float, K)
         f_temp: Final temperature (float or None, K)
         shake: Use SHAKE (boolean)
-        solver: lammps (str)
+        solver: lammps or gromacs (str)
         solver_path: File path of solver (str)
         work_dir: Path of work directory (str)
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
         thermostat: Nose-Hoover, Langevin, Berendsen, csvr, or csld (str, default:Nose-Hoover)
+            gromacs supports Nose-Hoover, csvr and Langevin
 
     Returns:
         Unwrapped coordinates (float, numpy.ndarray, angstrom)
@@ -657,7 +689,7 @@ def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -686,13 +718,13 @@ def quick_nvt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
     if hasattr(mol_copy, 'cell'):
         mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, uwstr
 
 
 def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None, press=1.0, f_press=None, shake=False, idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_npt
 
@@ -710,11 +742,16 @@ def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
         press: Initial pressure (float, atm)
         f_press: Final pressure (float or None, atm)
         shake: Use SHAKE (boolean)
-        solver: lammps (str)
+        solver: lammps or gromacs (str)
         solver_path: File path of solver (str)
         work_dir: Path of work directory (str)
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
         thermostat: Nose-Hoover, Langevin, Berendsen, csvr, or csld (str, default:Nose-Hoover)
+            gromacs supports Nose-Hoover, csvr and Langevin
         barostat: Nose-Hoover, or Berendsen (str, default:Nose-Hoover)
+            gromacs: Parrinello-Rahman or C-rescale must be selected explicitly
+        compressibility: Isothermal compressibility for gromacs (float, bar^-1, default:4.5e-5)
 
     Returns:
         Unwrapped coordinates (float, numpy.ndarray, angstrom)
@@ -724,7 +761,7 @@ def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -754,13 +791,13 @@ def quick_npt(mol, confId=0, step=2000, time_step=None, temp=300.0, f_temp=None,
     setattr(mol_copy, 'cell', utils.Cell(cell[0, 1], cell[0, 0], cell[1, 1], cell[1, 0], cell[2, 1], cell[2, 0]))
     mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, uwstr, cell
 
 
 def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None, shake=False, idx=None, tmp_clear=False,
-            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, **kwargs):
+            solver='lammps', solver_path=None, work_dir=None, omp=1, mpi=0, gpu=0, interaction_profile=None, **kwargs):
     """
     MD.quick_nph
 
@@ -776,9 +813,11 @@ def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None,
         press: Initial pressure (float, atm)
         f_press: Final pressure (float or None, atm)
         shake: Use SHAKE (boolean)
-        solver: lammps (str)
+        solver: lammps or gromacs (str)
         solver_path: File path of solver (str)
         work_dir: Path of work directory (str)
+        interaction_profile: None (RadonPy defaults; gromacs approximates them) or 'portable'
+            (str, an exactly reproducible model for development and validation)
         barostat: Nose-Hoover, or Berendsen (str, default:Nose-Hoover)
 
     Returns:
@@ -789,7 +828,7 @@ def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None,
 
     sol = MD_solver(md_solver=solver, work_dir=work_dir, solver_path=solver_path, idx=idx)
 
-    md = MD(idx=idx, mol=mol_copy)
+    md = MD(idx=idx, mol=mol_copy, interaction_profile=interaction_profile)
     if not hasattr(mol_copy, 'cell'):
         md.pbc = False
         calc.centering_mol(mol_copy, confId=confId)
@@ -818,7 +857,7 @@ def quick_nph(mol, confId=0, step=2000, time_step=None, press=1.0, f_press=None,
     setattr(mol_copy, 'cell', utils.Cell(cell[0, 1], cell[0, 0], cell[1, 1], cell[1, 0], cell[2, 1], cell[2, 0]))
     mol_copy = calc.mol_trans_in_cell(mol_copy, confId=confId)
 
-    if tmp_clear: md.clear(work_dir)
+    if tmp_clear: md.clear(sol.work_dir)
 
     return mol_copy, uwstr, cell
 

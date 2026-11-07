@@ -25,7 +25,8 @@ from scipy import optimize
 
 import radonpy
 from ...core import utils, calc
-from .. import lammps
+import json
+from .. import gromacs, lammps
 from . import eq, tc
 from ..md import MD
 
@@ -82,7 +83,7 @@ class Deformation(eq.Equilibration):
                     omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
 
         utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
-        lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
+        lmp = self.get_solver()
         lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         dt1 = datetime.datetime.now()
@@ -108,8 +109,13 @@ class Deformation(eq.Equilibration):
                         deform_rate=5e-6, deform_step=100000, relax_step=500000, # deformation process
                         cooling_step=500, interval_temp=10, # cooling process
                         **kwargs):
+        if self.solver != 'lammps':
+            return self.sampling_deform_options(time_step=time_step, press=press, tstead=tstead, tmax=tmax,
+                                                heating_step=heating_step, deform_rate=deform_rate,
+                                                deform_step=deform_step, relax_step=relax_step,
+                                                cooling_step=cooling_step, interval_temp=interval_temp, **kwargs)
         p_dump = 1000
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -176,14 +182,12 @@ class Deformation(eq.Equilibration):
         add.append('fix momentum1 all momentum %i linear 1 1 1' % 50)
         add.append('variable GamNsurf equal l%s*(p%s%s-0.5*(p%s%s+p%s%s))*101325/1e10*1e3'
                    %(self.deform_direction, self.deform_direction, self.deform_direction, per_directions[0], per_directions[0], per_directions[1], per_directions[1]))
-        add.append('thermo_style custom step time temp pe ke etotal enthalpy press vol density lx ly lz pxx pyy pzz pxy pxz pyz v_GamNsurf epair evdwl ecoul elong etail emol ebond eangle edihed eimp v_EngStrain')
-        add.append('thermo_modify flush yes')
-        add.append('thermo %i' % dthermo_freq)
         add_f.append('unfix shakeDEF1')
         add_f.append('unfix DEF1')
         add_f.append('unfix momentum1')
+        # Every run writes its thermo_style after the add lines, so the deformation variables are given as its own columns.
         md.add_md(None, step=deform_step, time_step=time_step, shake=False, t_start=tmax, t_stop=tmax,
-                  add=add, add_f=add_f, **kwargs)
+                  thermo_style=['v_GamNsurf', 'v_EngStrain'], thermo_freq=dthermo_freq, add=add, add_f=add_f, **kwargs)
 
         # cooling process
         if tmax != tstead:
@@ -213,6 +217,56 @@ class Deformation(eq.Equilibration):
             add.append('')
             md.add_md('nvt', step=relax_step, time_step=time_step, shake=True, t_start=tstead, t_stop=tstead, add=add, **kwargs)
 
+        return md
+
+
+
+    def sampling_deform_options(self, time_step=1.0, press=1.0, tstead=300.0, tmax=500.0, heating_step=100000,
+                                deform_rate=5e-6, deform_step=100000, relax_step=500000, cooling_step=500,
+                                interval_temp=10, **kwargs):
+        """
+        The protocol of sampling_deform as MD options instead of raw LAMMPS commands (for GROMACS)
+
+        The deformation is a strain-rate deformation of the box with remap x, in NPT with the
+        lateral pressures given as px/py/pz_start, _stop and _dump (Parrinello-Rahman), one
+        thermo frequency for every stage (dthermo_freq), and no fix momentum (GROMACS removes the
+        center-of-mass motion every 100 steps). Deformation_Analysis derives v_EngStrain and
+        v_GamNsurf from the box lengths and pressures.
+        """
+        p_dump = 1000
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
+        md.pair_style = self.pair_style
+        md.cutoff_in = self.cutoff_in
+        md.cutoff_out = self.cutoff_out
+        md.kspace_style = self.kspace_style
+        md.kspace_style_accuracy = self.kspace_style_accuracy
+        md.neighbor = '%s bin' % self.neighbor_dis
+        md.log_file = kwargs.get('log_file', self.log_file)
+        md.dat_file = kwargs.get('dat_file', self.dat_file)
+        md.rst = True
+        md.outstr = kwargs.get('last_str', self.last_str)
+        md.write_data = kwargs.get('last_data', self.last_data)
+        md.dump_file = kwargs.get('dump_file', self.dump_file)
+        md.xtc_file = kwargs.get('xtc_file', self.xtc_file)
+        md.dump_freq = kwargs.get('dump_freq', 1000)
+        md.thermo_freq = kwargs.get('dthermo_freq', 100 if int(deform_step/1000)<100 else int('%s00' % str(deform_step/1000)[0]) if int(deform_step/1000)<1000 else 1000)
+        lateral = {key: kwargs.pop(key) for key in list(kwargs)
+                   if key[:2] in ('px', 'py', 'pz') and key[2:] in ('_start', '_stop', '_dump') and key[1] != self.deform_direction}
+        for key in ('hthermo_freq', 'dthermo_freq', 'drthermo_freq', 'cthermo_freq'):
+            kwargs.pop(key, None)
+        if tmax > tstead:
+            md.add_md('npt', step=heating_step, time_step=time_step, shake=True, t_start=tstead, t_stop=tmax,
+                      p_start=press, p_stop=press, p_dump=p_dump, **kwargs)
+            md.add_md('npt', step=relax_step, time_step=time_step, shake=True, t_start=tmax, t_stop=tmax,
+                      p_start=press, p_stop=press, p_dump=p_dump, **kwargs)
+        md.add_md('npt', step=deform_step, time_step=time_step, shake=True, t_start=tmax, t_stop=tmax,
+                  p_start=press, p_stop=press, p_dump=p_dump, p_aniso=True, **lateral, **kwargs)
+        md.wf[-1].add_deform(dftype='erate', axis=self.deform_direction, deform_rate=deform_rate, remap='x')
+        if tmax != tstead:
+            for temp in np.arange(tmax, tstead, -interval_temp):
+                md.add_md('nvt', step=cooling_step, time_step=time_step, shake=True, t_start=temp, t_stop=temp, **kwargs)
+                md.add_md('nvt', step=cooling_step, time_step=time_step, shake=True, t_start=temp, t_stop=temp-interval_temp, **kwargs)
+        md.add_md('nvt', step=relax_step, time_step=time_step, shake=True, t_start=tstead, t_stop=tstead, **kwargs)
         return md
 
 
@@ -261,7 +315,7 @@ class further_Additional(eq.Equilibration):
                 omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         
         utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
-        lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
+        lmp = self.get_solver()
         lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         dt1 = datetime.datetime.now()
@@ -279,10 +333,14 @@ class further_Additional(eq.Equilibration):
         utils.radon_print('Elapsed time = %s' %str(dt2-dt1), level=1)
 
 
+    def log_reader(self):
+        return lammps.Analyze if self.solver == 'lammps' else gromacs.Analyze
+
+
     def sampling_dp(self, temp=300.0, press=1.0, step=5000000, time_step=1.0, **kwargs):
 
         p_dump = 1000
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -359,7 +417,7 @@ class further_Additional(eq.Equilibration):
         echarge = 1.602176634E-19   # unit= e = 1.602176634E−19 C
 
         log_file = os.path.join(self.work_dir, self.log_file)
-        lmpanal = lammps.Analyze(log_file=log_file)
+        lmpanal = self.log_reader()(log_file=log_file)
         logs = lmpanal.dfs[-1]
         times = logs['Time'].to_numpy()  # unit = fs
         dipoles = logs['v_mu%s' % self.axis].to_numpy() * 1e-10    # unit = charge(=e) * m
@@ -407,7 +465,7 @@ class further_Additional(eq.Equilibration):
         echarge = 1.602176634E-19   # unit= e = 1.602176634E−19 C
 
         log_file = os.path.join(self.work_dir, self.log_file)
-        lmpanal = lammps.Analyze(log_file=log_file)
+        lmpanal = self.log_reader()(log_file=log_file)
         logs = lmpanal.dfs[-1]
         logs = logs.iloc[int(logs.shape[0]/2):]
         times = logs['Time'].to_numpy()  # unit = fs
@@ -521,15 +579,44 @@ class Deformation_Analysis():
         self.log_file = kwargs.get('log_file', 'eq%i_deform_%s_%ipercent.log' % (self.idx, self.deform_direction, int(self.deform_strain*100)))
         self.work_dir = work_dir
         self.save_dir = os.path.join(work_dir, 'analyze')
+        self.solver = kwargs.get('solver', 'lammps').lower()
+
+
+    def log_extraction_gromacs(self):
+        """Stages of a GROMACS run, with the LAMMPS deformation variables computed from the box and pressures."""
+        anal = gromacs.Analyze(log_file=os.path.join(self.work_dir, self.log_file))
+        workflow = json.loads(open(anal.metadata['manifest']).read())['workflow']
+        logs = [df.reset_index() for df in anal.dfs]
+        index = [i for i, wf in enumerate(workflow) if wf.get('deform') == 'erate'][0]
+        deform_log = self._deform_variables(logs[index])
+        whole_log = pd.concat(logs, axis=0, ignore_index=True)
+        return whole_log, deform_log
+
+
+    def _deform_variables(self, deform_log):
+        """The LAMMPS deformation variables v_EngStrain and v_GamNsurf from the box lengths and pressures."""
+        axis = self.deform_direction
+        lateral = [a for a in 'xyz' if a != axis]
+        length = deform_log['L%s' % axis]
+        deform_log['v_EngStrain'] = (length-length.iat[0])/length.iat[0]
+        deform_log['v_GamNsurf'] = length*(deform_log['P%s%s' % (axis, axis)]
+                                           - 0.5*(deform_log['P%s%s' % (lateral[0], lateral[0])]
+                                                  + deform_log['P%s%s' % (lateral[1], lateral[1])]))*101325/1e10*1e3
+        return deform_log
 
 
     def log_extraction(self,):
 
+        if self.solver != 'lammps':
+            return self.log_extraction_gromacs()
         nprocess = 0
+        deform_process = None
         in_file = os.path.join(self.work_dir, self.in_file)
         with open(in_file, 'r') as f:
             lines = [s.replace(' \n', '').replace('\n', '').replace('\r', '').replace('*', ' ') for s in f.readlines()]
             for line in lines:
+                if line.startswith('fix DEF') and deform_process is None:
+                    deform_process = nprocess
                 if 'run ' in line:
                     line_data = [f for f in line.split(' ')]
                     nprocess += 1
@@ -546,6 +633,11 @@ class Deformation_Analysis():
                 whole_log = logs[i]
             else:
                 whole_log = pd.concat([whole_log, logs[i]], axis=0, ignore_index=True)
+        if 'deform_log' not in locals() and deform_process is not None:
+            # The per-stage thermo_style written by MD replaces the deformation stage's
+            # one, so v_EngStrain and v_GamNsurf are derived from the box as for GROMACS.
+            deform_log = self._deform_variables(logs[init_id+deform_process])
+            whole_log = pd.concat(logs[init_id:], axis=0, ignore_index=True)
 
         return whole_log, deform_log
 

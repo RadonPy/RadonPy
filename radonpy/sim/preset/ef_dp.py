@@ -24,7 +24,7 @@ plt.rcParams['font.size'] = 11
 
 import radonpy
 from ...core import utils, const
-from .. import lammps
+from .. import gromacs, lammps
 from . import eq
 from ..md import MD
 
@@ -88,7 +88,7 @@ class further_Additional(eq.Equilibration):
                 omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
         
         utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
-        lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
+        lmp = self.get_solver()
         lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         dt1 = datetime.datetime.now()
@@ -106,10 +106,14 @@ class further_Additional(eq.Equilibration):
         utils.radon_print('Elapsed time = %s' %str(dt2-dt1), level=1)
 
 
+    def log_reader(self):
+        return lammps.Analyze if self.solver == 'lammps' else gromacs.Analyze
+
+
     def sampling_dp(self, temp=300.0, press=1.0, step=5000000, time_step=1.0, **kwargs):
 
         p_dump = 1000
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -190,7 +194,7 @@ class further_Additional(eq.Equilibration):
         echarge = const.e   # unit C
 
         log_file = os.path.join(self.work_dir, self.log_file)
-        lmpanal = lammps.Analyze(log_file=log_file)
+        lmpanal = self.log_reader()(log_file=log_file)
         logs = lmpanal.dfs[-1]
         times = logs['Time'].to_numpy()  # unit = fs
         dipoles = logs['v_mu%s' % self.axis].to_numpy() * 1e-10    # unit = charge(=e) * m
@@ -240,7 +244,7 @@ class further_Additional(eq.Equilibration):
         echarge = const.e       # unit: C
 
         log_file = os.path.join(self.work_dir, self.log_file)
-        lmpanal = lammps.Analyze(log_file=log_file)
+        lmpanal = self.log_reader()(log_file=log_file)
         logs = lmpanal.dfs[-1]
         logs = logs.iloc[int(logs.shape[0]/2):]
         times = logs['Time'].to_numpy()  # unit = fs

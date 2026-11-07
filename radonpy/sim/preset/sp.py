@@ -8,26 +8,44 @@
 
 import os
 import glob
+import json
 import re
 import datetime
+from pathlib import Path
 import numpy as np
+from rdkit import Chem
 from ...core import calc, const, utils
-from .. import lammps, preset
+from .. import gromacs, lammps, preset
 from ..md import MD
+from ..md_wrapper import MD_solver
 from matplotlib import pyplot as plt
 import pandas as pd
 from . import eq
 
 __version__ = '0.1.1'
 
+# Lines that LAMMPS prints between the thermo rows of the rerun. With OPENMP styles (-sf omp), pe/mol/tally
+# warns that the pair style did not tally, although the energies equal those of the plain styles.
+IGNORE_LOG = ['WARNING: Compute pe/mol/tally only called from pair style',
+              'WARNING: Energy was not tallied by pair style',
+              'No /omp style for force computation currently active',
+              'Last active /omp style is',
+              'WARNING: Too many warnings:']
+
 
 class SPMD(preset.Preset):
-    def __init__(self, mol, prefix='', work_dir=None, save_dir=None, solver_path=None, idx=None, sp_dir='sp_calc', **kwargs):
+    def __init__(self, mol, prefix='', work_dir=None, save_dir=None, solver_path=None, idx=None, sp_dir='sp_calc',
+                 solver='lammps', interaction_profile=None, **kwargs):
         """
         SPMD class create input file for sp value calculation
-        
+
+        Optional args:
+            solver: lammps or gromacs (str)
+            interaction_profile: None (RadonPy defaults) or 'portable' (str, for development and validation)
         """
         super().__init__(mol, prefix=prefix, work_dir=work_dir, save_dir=save_dir, solver_path=solver_path, **kwargs)
+        self.solver = solver.lower()
+        self.interaction_profile = interaction_profile
         os.makedirs(os.path.join(work_dir, sp_dir), exist_ok=True)
         self.data = {}
         self.idx = eq.get_final_idx(self.work_dir) if idx is None else idx
@@ -47,7 +65,7 @@ class SPMD(preset.Preset):
     def rerun(self, temp=300.0, press=1.0, step=5000000, **kwargs):
 
         p_dump = 1000
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -81,11 +99,10 @@ class SPMD(preset.Preset):
         return md
 
 
-    def analyze(self, ignore_log=['WARNING: Compute pe/mol/tally only called from pair style',
-                'No /omp style for force computation currently active',
-                'WARNING: Too many warnings:'], **kwargs):
+    def analyze(self, ignore_log=IGNORE_LOG, **kwargs):
 
-        analy = SPMD_analyze(
+        analyzer = SPMD_analyze if self.solver == 'lammps' else SPMD_analyze_gromacs
+        analy = analyzer(
             log_file  = os.path.join(self.work_dir, self.log_file),
             ignore_log = ignore_log,
             **kwargs
@@ -94,14 +111,12 @@ class SPMD(preset.Preset):
         return analy
 
 
-class SPMD_analyze(lammps.Analyze):
+class SPMD_analysis:
     '''
-    SPMD_analyze class reads and analyzes log files. 
+    Solubility parameter from the thermo data of either engine (see SPMD_analyze and SPMD_analyze_gromacs).
     '''
     def __init__(self, log_file=None, save_dir=None,
-                 ignore_log=['WARNING: Compute pe/mol/tally only called from pair style',
-                             'No /omp style for force computation currently active',
-                             'WARNING: Too many warnings:'], **kwargs):
+                 ignore_log=IGNORE_LOG, **kwargs):
         super().__init__(log_file=log_file, ignore_log=ignore_log, **kwargs)
         self.save_dir = save_dir
         # self.ignore_log = ignore_log
@@ -278,6 +293,18 @@ class SPMD_analyze(lammps.Analyze):
         return data
 
 
+class SPMD_analyze(SPMD_analysis, lammps.Analyze):
+    '''
+    SPMD_analyze class reads and analyzes log files. 
+    '''
+
+
+class SPMD_analyze_gromacs(SPMD_analysis, gromacs.Analyze):
+    '''
+    SPMD analysis of GROMACS reruns; same calculation as SPMD_analyze.
+    '''
+
+
 class Rerun(SPMD):
     def __init__(self, mol, prefix='', work_dir=None, solver_path=None, idx=None, sp_dir='sp_calc', **kwargs):
         """
@@ -316,6 +343,8 @@ class Rerun(SPMD):
             RDKit Mol object
         """
 
+        if self.solver != 'lammps':
+            return self.exec_gromacs(omp=omp, gpu=gpu)
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
         lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
@@ -331,6 +360,51 @@ class Rerun(SPMD):
         self.data.update(result)
         
         return self.mol, self.data
+
+
+    def exec_gromacs(self, omp=1, gpu=0):
+        """
+        The energy decomposition of exec with GROMACS reruns of the eq trajectory (eq<idx>.xtc)
+
+        A rerun of the whole system gives E_vdwl, E_coul and E_long; a rerun of each molecule alone in
+        the same boxes (the other atoms without charges or LJ) gives its intramolecular vdW, short-range
+        and reciprocal-space Coulomb energies, including its periodic images, as LAMMPS pe/mol/tally and
+        group/group kspace do. Like LAMMPS, at most 31 molecules are decomposed. The frames are those of
+        the XTC trajectory (0.001 nm precision).
+        """
+        from mdtraj.formats import XTCTrajectoryFile
+        dt1 = datetime.datetime.now()
+        utils.radon_print('sp_rerun by GROMACS is running...', level=1)
+        with XTCTrajectoryFile(os.path.join(self.work_dir, 'eq%i.xtc' % self.idx)) as traj:
+            xyz, time, _, box = traj.read()
+        xyz, lengths = xyz*10, box[:, [0, 1, 2], [0, 1, 2]]*10
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
+        solver = self.get_solver()
+        name = os.path.splitext(self.log_file)[0]
+        frame = solver.rerun(md, self.mol, xyz, lengths, name=name+'_total', omp=omp, gpu=gpu)
+        frame['Time'] = time*1000
+        for i, atoms in enumerate(Chem.GetMolFrags(self.mol)[:31]):
+            alone = utils.deepcopy_mol(self.mol)
+            for atom in alone.GetAtoms():
+                if atom.GetIdx() not in atoms:
+                    atom.SetDoubleProp('AtomicCharge', 0.0)
+                    atom.SetDoubleProp('ff_epsilon', 0.0)
+            intra = solver.rerun(md, alone, xyz, lengths, name='%s_mol%i' % (name, i), omp=omp, gpu=gpu)
+            # The signs of the LAMMPS thermo variables.
+            frame['v_mol%i_evdw_intra' % i] = -intra['E_vdwl'].to_numpy()
+            frame['v_mol%i_ecoul_intra' % i] = -intra['E_coul'].to_numpy()
+            frame['v_mol%i_elong_intra' % i] = -intra['E_long'].to_numpy()
+        Path(os.path.join(self.work_dir, self.log_file)+'.gmx.json').write_text(
+            json.dumps({'frames': [frame.reset_index().to_dict('list')]}))
+        dt2 = datetime.datetime.now()
+        utils.radon_print('Complete sp_rerun . Elapsed time = %s' % (str(dt2-dt1)), level=1)
+        result = self.analyze(save_dir=self.save_dir).Solubility_Parameter()
+        self.data.update(result)
+        return self.mol, self.data
+
+
+    def get_solver(self):
+        return MD_solver(md_solver=self.solver, work_dir=self.work_dir, solver_path=self.solver_path)
 
 
     def make_lammps_input(self, confId=0, temp=300.0, press=1.0, eq_step=5, omp=1, mpi=1, gpu=0, **kwargs):
