@@ -1580,8 +1580,9 @@ class Analyze():
             return None
 
         for i in range(n):
+            f_init = i + init - f_width
             f_last = i + init
-            prop = func(thermo_df, temp=temp, press=press, mass=mass, init=init-f_width, last=f_last)
+            prop = func(thermo_df, temp=temp, press=press, mass=mass, init=f_init, last=f_last)
             law_data.append([thermo_df['Time'].values[f_last], prop])
 
         if not last: last = 0
