@@ -49,6 +49,14 @@ if __name__ == '__main__':
     rst_pickle_file = os.environ.get('RadonPy_Pickle_File', None)
     skip_init_analy = bool(os.environ.get('RadonPy_Skip_Init_Analy', False) == 'True')
     del_traj = bool(os.environ.get('RadonPy_Del_Traj', False) == 'True')
+    # MD engine of eq presets; the default keeps the LAMMPS settings.
+    # GROMACS needs RadonPy_Barostat=C-rescale (or Parrinello-Rahman); RadonPy_Interaction_Profile=portable
+    # selects the validation model.
+    eq_options = {
+        'solver': os.environ.get('RadonPy_MD_Solver', 'lammps'),
+        'interaction_profile': os.environ.get('RadonPy_Interaction_Profile') or None,
+    }
+    eq_kwargs = {'barostat': os.environ['RadonPy_Barostat']} if os.environ.get('RadonPy_Barostat') else {}
 
 
     work_dir = './%s' % data['DBID']
@@ -66,7 +74,7 @@ if __name__ == '__main__':
         result = False
     else:
         last_idx = eq.get_final_idx(work_dir)
-        eqmd = eq.Additional(mol, work_dir=work_dir, idx=last_idx)
+        eqmd = eq.Additional(mol, work_dir=work_dir, idx=last_idx, **eq_options)
         analy = eqmd.analyze()
         analy.pdb_file = os.path.join(work_dir, 'eq1.pdb')
         prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
@@ -75,8 +83,8 @@ if __name__ == '__main__':
     # Additional equilibration MD
     for i in range(retry_eq):
         if result: break
-        eqmd = eq.Additional(mol, work_dir=work_dir)
-        mol = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt)
+        eqmd = eq.Additional(mol, work_dir=work_dir, **eq_options)
+        mol = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt, **eq_kwargs)
         analy = eqmd.analyze()
         analy.pdb_file = os.path.join(work_dir, 'eq1.pdb')
         prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)

@@ -45,6 +45,11 @@ if __name__ == '__main__':
     rst_json_file = os.environ.get('RadonPy_JSON_File', None) 
     rst_pickle_file = os.environ.get('RadonPy_Pickle_File', None)
     sp_force = bool(os.environ.get('RadonPy_SP_Force', False) == 'True')
+    # Same engine selection as 1_eq.py.
+    sp_options = {
+        'solver': os.environ.get('RadonPy_MD_Solver', 'lammps'),
+        'interaction_profile': os.environ.get('RadonPy_Interaction_Profile') or None,
+    }
 
     work_dir = './%s' % data['DBID']
     save_dir = os.path.join(work_dir, 'analyze')
@@ -60,7 +65,7 @@ if __name__ == '__main__':
     mol = io.load_md_obj(rst_json_file=rst_json_file, rst_pickle_file=rst_pickle_file)
 
     # SP calculation (using rerun)
-    spmd = sp.Rerun(mol, work_dir=work_dir)
+    spmd = sp.Rerun(mol, work_dir=work_dir, **sp_options)
     mol, sp_results = spmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu)    
 
     # Reload MD csv data

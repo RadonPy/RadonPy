@@ -15,8 +15,9 @@ import pandas as pd
 from scipy.optimize import curve_fit
 from rdkit import Geometry as Geom
 from ...core import calc, const, utils
-from .. import lammps, preset
+from .. import gromacs, lammps, preset
 from ..md import MD
+from ..md_wrapper import MD_solver
 
 from matplotlib import pyplot as plt
 
@@ -24,7 +25,8 @@ __version__ = '0.1.5'
 
 
 class EQMD(preset.Preset):
-    def __init__(self, mol, prefix='', work_dir=None, save_dir=None, solver_path=None, no_traj=True, **kwargs):
+    def __init__(self, mol, prefix='', work_dir=None, save_dir=None, solver_path=None, no_traj=True,
+                 solver='lammps', interaction_profile=None, **kwargs):
         """
         preset.eq.Equilibration
 
@@ -32,8 +34,16 @@ class EQMD(preset.Preset):
 
         Args:
             mol: RDKit Mol object
+
+        Optional args:
+            solver: lammps or gromacs (str)
+            interaction_profile: None (RadonPy defaults) or 'portable' (str, for development and validation)
+                gromacs requires an explicit barostat
+                ('Parrinello-Rahman' or 'C-rescale') passed to exec
         """
         super().__init__(mol, prefix=prefix, work_dir=work_dir, save_dir=save_dir, solver_path=solver_path, **kwargs)
+        self.solver = solver.lower()
+        self.interaction_profile = interaction_profile
         self.data = {}
         self.curdir = os.getcwd()
         self.work_dir_tg = os.path.join(self.work_dir, 'md_tg')
@@ -69,7 +79,7 @@ class EQMD(preset.Preset):
         self.rg_file     = kwargs.get('rg_file',     '%stg.profile' % self.prefix)
         
     def density_checker(self, t_start, t_stop, press=1.0, time_step=1.0, step=1e5, p_dump=1000, **kwargs):
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -92,7 +102,7 @@ class EQMD(preset.Preset):
         return md
     
     def equilibration(self, temp, press=1.0, time_step=1.0, step=5e5, p_dump=1000, **kwargs):
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -125,7 +135,7 @@ class EQMD(preset.Preset):
         '''
         step = int(cooling_rate/2)
         
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -164,7 +174,7 @@ class EQMD(preset.Preset):
         '''
         step = int(cooling_rate/2)
         
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -197,7 +207,7 @@ class EQMD(preset.Preset):
     def continuous(self, max_temp, min_temp, press=1.0, time_step=1.0, p_dump=1000, cooling_rate=1e3, interval_temp=10, **kwargs):
         
         step = int( cooling_rate*(max_temp - min_temp)/interval_temp )
-        md = MD()
+        md = MD(mol=self.mol, interaction_profile=self.interaction_profile)
         md.pair_style = self.pair_style
         md.cutoff_in = self.cutoff_in
         md.cutoff_out = self.cutoff_out
@@ -219,9 +229,17 @@ class EQMD(preset.Preset):
         return md
 
 
+    def get_solver(self):
+        return MD_solver(md_solver=self.solver, work_dir=self.work_dir_tg, solver_path=self.solver_path)
+
+
+    def analyzer(self):
+        return TGMD_analyze if self.solver == 'lammps' else TGMD_analyze_gromacs
+
+
     def analyze(self, ignore_log=[], **kwargs):
 
-        analy = TGMD_analyze(
+        analy = self.analyzer()(
             log_file  = os.path.join(self.work_dir_tg, kwargs.get('log_file', self.log_file)),
             ignore_log = ignore_log,
             **kwargs
@@ -230,9 +248,9 @@ class EQMD(preset.Preset):
         return analy
 
 
-class TGMD_analyze(lammps.Analyze):
+class TGMD_analysis:
     '''
-    TGMD_analyze class reads and analyzes dump/log files. 
+    Tg algorithms on the thermo data of either engine (see TGMD_analyze and TGMD_analyze_gromacs).
     '''
     def __init__(self, log_file=None, save_dir=None, ignore_log=[], **kwargs):
         super().__init__(log_file=log_file, ignore_log=ignore_log, **kwargs)
@@ -281,7 +299,8 @@ class TGMD_analyze(lammps.Analyze):
         df = self.read_log(self.log_file)
         df_mean = pd.DataFrame( [d[prop_list].mean() for d in df[0::2]] ).to_numpy().T
         df_index = df_mean[arg_get('Density')] <= 0.45
-        df_arg   = np.argsort(df_mean[arg_get('Temp'),df_index[0]])[0]
+        # The fit starts at the coolest melt below 0.45 g/cm3, or at the hottest temperature when the melt stays denser.
+        df_arg   = np.argsort(df_mean[arg_get('Temp'),df_index[0]])[0] if df_index[0].any() else 0
         df_mean = df_mean[:,df_arg:]
         ndim, ndata = df_mean.shape
         
@@ -357,6 +376,18 @@ class TGMD_analyze(lammps.Analyze):
     def continuous():
         print('hello')
 
+
+class TGMD_analyze(TGMD_analysis, lammps.Analyze):
+    '''
+    TGMD_analyze class reads and analyzes dump/log files. 
+    '''
+
+
+class TGMD_analyze_gromacs(TGMD_analysis, gromacs.Analyze):
+    '''
+    TGMD analysis of GROMACS results; same algorithms as TGMD_analyze.
+    '''
+
         
 class TGMD(EQMD):
     '''
@@ -364,7 +395,7 @@ class TGMD(EQMD):
     '''
     def exec(self, temp, confId=0, min_temp=50.0, time_step=1.0, interval_temp=10,
              cooling_rate=1e3, eq_step=0.5, omp=1, mpi=1, gpu=0, intel='auto', opt='auto', **kwargs):
-        lmp = lammps.LAMMPS(work_dir=self.work_dir_tg, solver_path=self.solver_path)
+        lmp = self.get_solver()
     
         #
         # Density check algorithms
@@ -376,11 +407,16 @@ class TGMD(EQMD):
         for i in range(10):
             dt1 = datetime.datetime.now()
             utils.radon_print('Density Search algorithm (tg_pre): No%02d (%d K -> %d K)'%(i+1, t_start, t_stop), level=1)
-            md1 = self.density_checker(t_start=t_start, t_stop=t_stop, step=(t_stop-t_start)*pre_cooling_rate)
-            lmp.make_input(md1, file_name=self.pre_in_file)
-            self.mol = lmp.run(md1, mol=self.mol, confId=confId, input_file=self.pre_in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
+            pre_in_file, pre_log_file = self.pre_in_file, self.pre_log_file
+            if self.solver != 'lammps':
+                # LAMMPS appends every search run to one log; GROMACS keeps each run's files.
+                numbered = lambda f: '%s_%02d%s' % (os.path.splitext(f)[0], i+1, os.path.splitext(f)[1])
+                pre_in_file, pre_log_file = numbered(self.pre_in_file), numbered(self.pre_log_file)
+            md1 = self.density_checker(t_start=t_start, t_stop=t_stop, step=(t_stop-t_start)*pre_cooling_rate,
+                                       **{**kwargs, 'pre_log_file': pre_log_file})
+            self.mol = lmp.run(md1, mol=self.mol, confId=confId, input_file=pre_in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
             dt2 = datetime.datetime.now()
-            result = TGMD_analyze(log_file=os.path.join(self.work_dir_tg, self.pre_log_file), save_dir=self.save_dir).density_checker(i)
+            result = self.analyzer()(log_file=os.path.join(self.work_dir_tg, pre_log_file), save_dir=self.save_dir).density_checker(i)
             utils.radon_print('Complete Density Search algorithm (tg_pre: %0.2f). Elapsed time = %s' %(result['tg_init_density'], str(dt2-dt1)), level=1)
             if result['tg_init_density_check']:
                 result['tg_max_temp'] = t_stop
@@ -402,9 +438,8 @@ class TGMD(EQMD):
         # Equilibration algorithm for Tg
         #
         dt1 = datetime.datetime.now()
-        utils.radon_print('Equilibration (tg_eq) by LAMMPS is running...', level=1)
+        utils.radon_print('Equilibration (tg_eq) by %s is running...' % lmp.get_name, level=1)
         md2 = self.equilibration(temp=float(self.data['tg_max_temp']), step=5e5, **kwargs)
-        lmp.make_input(md2, file_name=self.eq_in_file)
         self.mol = lmp.run(md2, mol=self.mol, confId=confId, input_file=self.eq_in_file,omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete Equilibration (tg_eq). Elapsed time = %s' % str(dt2-dt1), level=1)
@@ -425,18 +460,17 @@ class TGMD(EQMD):
         self.data['tg_interval_temp'] = interval_temp
         t_step = (self.data['tg_max_temp'] - self.data['tg_min_temp'])/self.data['tg_interval_temp']*cooling_rate
         dt1 = datetime.datetime.now()
-        utils.radon_print('Glass transition algorithm (tg) by LAMMPS is running...', level=1)
+        utils.radon_print('Glass transition algorithm (tg) by %s is running...' % lmp.get_name, level=1)
         utils.radon_print('Total Computational Time: %d steps (= %0.2f ns)'%(t_step, t_step/1e6), level=1)
         md3 = self.step_wise(max_temp=self.data['tg_max_temp'], 
                              min_temp=self.data['tg_min_temp'], 
                              cooling_rate=self.data['tg_cooling_rate'], 
                              interval_temp=self.data['tg_interval_temp'], **kwargs)
-        lmp.make_input(md3, file_name=self.in_file)
         self.mol = lmp.run(md3, mol=self.mol, confId=confId, input_file=self.in_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
         dt2 = datetime.datetime.now()
         utils.radon_print('Complete glass transition algorithm (tg). Elapsed time = %s' % str(dt2-dt1), level=1)
         
-        result = TGMD_analyze(log_file=os.path.join(self.work_dir_tg, self.log_file), save_dir=self.save_dir).step_wise()
+        result = self.analyzer()(log_file=os.path.join(self.work_dir_tg, self.log_file), save_dir=self.save_dir).step_wise()
 
         if result is None:
             utils.radon_print('Tg could not be calculated in TGMD_analyze.', level=3)

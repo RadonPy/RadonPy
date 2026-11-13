@@ -67,6 +67,14 @@ if __name__ == '__main__':
     retry_eq = int(os.environ.get('RadonPy_RetryEQ', 0))
     no_traj = bool(os.environ.get('RadonPy_No_Traj', False) == 'True')
     del_traj = bool(os.environ.get('RadonPy_Del_Traj', False) == 'True')
+    # MD engine of eq presets; the default keeps the LAMMPS settings.
+    # GROMACS needs RadonPy_Barostat=C-rescale (or Parrinello-Rahman); RadonPy_Interaction_Profile=portable
+    # selects the validation model.
+    eq_options = {
+        'solver': os.environ.get('RadonPy_MD_Solver', 'lammps'),
+        'interaction_profile': os.environ.get('RadonPy_Interaction_Profile') or None,
+    }
+    eq_kwargs = {'barostat': os.environ['RadonPy_Barostat']} if os.environ.get('RadonPy_Barostat') else {}
 
 
     work_dir = './%s' % data['DBID']
@@ -208,8 +216,8 @@ if __name__ == '__main__':
     data_df.to_csv(os.path.join(save_dir, 'input_data.csv'))
 
     # Equilibration MD
-    eqmd = eq.EQ21step(ac, work_dir=work_dir, no_traj_ann=no_traj)
-    ac = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt)
+    eqmd = eq.EQ21step(ac, work_dir=work_dir, no_traj_ann=no_traj, **eq_options)
+    ac = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt, **eq_kwargs)
     analy = eqmd.analyze()
     prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
     result = analy.check_eq()
@@ -217,8 +225,8 @@ if __name__ == '__main__':
     # Additional equilibration MD
     for i in range(retry_eq):
         if result: break
-        eqmd = eq.Additional(ac, work_dir=work_dir)
-        ac = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt)
+        eqmd = eq.Additional(ac, work_dir=work_dir, **eq_options)
+        ac = eqmd.exec(temp=data['temp'], press=data['press'], mpi=mpi, omp=omp, gpu=gpu, intel=intel, opt=opt, **eq_kwargs)
         analy = eqmd.analyze()
         prop_data = analy.get_all_prop(temp=data['temp'], press=data['press'], save=True)
         result = analy.check_eq()
