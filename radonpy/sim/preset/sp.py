@@ -349,6 +349,12 @@ class Rerun(SPMD):
         lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         dt1 = datetime.datetime.now()
+        if lmp._use_kokkos(gpu):
+            utils.radon_print('SP energy tally uses CPU pair forces; KOKKOS does not supply these callbacks.', level=1)
+            lmp.kokkos = 'off'
+            gpu = omp = 0
+            intel = opt = 'off'
+
         utils.radon_print('sp_rerun by LAMMPS is running...', level=1)
         md = self.rerun(temp=temp, press=press, step=int(1000000*eq_step), **kwargs)
         self.mol = lmp.run(md, mol=self.mol, confId=confId, input_file=self.in_file, last_str=self.last_str, last_data=self.last_data,
