@@ -21,7 +21,7 @@ import resp
 
 from ..core import const, calc, utils
 
-__version__ = '1.0b1'
+__version__ = '1.0b2'
 
 if LooseVersion(psi4.__version__) >= LooseVersion('1.4'):
     import qcengine
@@ -230,7 +230,7 @@ class Psi4w():
         return energy*const.au2kj # Hartree -> kJ/mol
 
 
-    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=0, **kwargs):
+    def optimize(self, wfn=True, freeze=[], ignore_conv_error=False, opt_type='min', geom_iter=50, geom_conv='QCHEM', geom_algorithm='RFO', dynamic_level=1, **kwargs):
         """
         Psi4w.optimize
 
@@ -249,7 +249,7 @@ class Psi4w():
 
         pmol = self._init_psi4(output='./%s_psi4_opt.log' % self.name)
 
-        if dynamic_level == 0 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
+        if dynamic_level < 1 and calc.find_liner_angle(self.mol) and LooseVersion(psi4.__version__) < LooseVersion('1.8'):
             utils.radon_print('Found a linear angle in the molecule. Psi4 optimization setting \'dynamic_level\' was changed to 2.')
             dynamic_level = 2
             geom_iter = int(2*geom_iter)
@@ -259,7 +259,7 @@ class Psi4w():
             'GEOM_MAXITER': geom_iter,
             'G_CONVERGENCE': geom_conv,
             'STEP_TYPE': geom_algorithm,
-            'OPTKING__ENSURE_BT_CONVERGENCE': True,
+            'ENSURE_BT_CONVERGENCE': True,
             'DYNAMIC_LEVEL': dynamic_level,
 #            'PRINT_OPT_PARAMS': True,
         }

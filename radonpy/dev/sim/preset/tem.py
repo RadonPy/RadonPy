@@ -125,7 +125,6 @@ class NEMD_tensile(preset.Preset):
 
         analy = lammps.Analyze(
             log_file  = os.path.join(self.work_dir, self.log_file['x']),
-            traj_file = os.path.join(self.work_dir, self.xtc_file['x']),
             pdb_file  = os.path.join(self.work_dir, self.pdb_file),
             dat_file  = os.path.join(self.work_dir, self.dat_file),
 
@@ -245,16 +244,12 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
         self.bulk_mod_data = {}
         self.shear_mod_data = {}
         self.lame_const_data = {}
-        self.tensile_visco_data = {}
-        self.shear_visco_data = {}
         self.speed_sound_data = {}
         self.speed_sound_s_data = {}
 
 
     def calc_tensile_prop(self, n_split=1):
         young_m = {}
-        tensile_v = {}
-        shear_v = {}
         poisson = {}
 
         for i, axis in enumerate(['x', 'y', 'z']):
@@ -272,31 +267,22 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
             true_strain['y'] = np.log(1.0 + strain['y'])
             true_strain['z'] = np.log(1.0 + strain['z'])
             stress = df['f_pave[%i]' % (i+2)].to_numpy() * -1 * const.atm2pa * 1e-6  # atm -> MPa
-            true_stress = stress * (1.0 + strain[axis])
             time = df['Time'].to_numpy()
 
-            young_m[axis], tensile_v[axis], shear_v[axis] = self.calc_tensile_modulus(true_stress, true_strain[axis], time, axis=axis, save=self.save_dir)
+            young_m[axis] = self.calc_tensile_modulus(stress, true_strain[axis], time, axis=axis, save=self.save_dir)
             poisson[axis] = self.calc_poisson_ratio(true_strain, time, axis=axis, save=self.save_dir)
 
         prop_data = {
             'tem_tensile_modulus': np.mean(list(young_m.values())),
-            'tem_tensile_viscosity': np.mean(list(tensile_v.values())),
-            'tem_shear_viscosity': np.mean(list(shear_v.values())),
             'tem_poisson_ratio': np.mean(list(poisson.values())),
  
             'tem_tensile_modulus_x': young_m['x'],
-            'tem_tensile_viscosity_x': tensile_v['x'],
-            'tem_shear_viscosity_x': shear_v['x'],
             'tem_poisson_ratio_x': poisson['x'],
 
             'tem_tensile_modulus_y': young_m['y'],
-            'tem_tensile_viscosity_y': tensile_v['y'],
-            'tem_shear_viscosity_y': shear_v['y'],
             'tem_poisson_ratio_y': poisson['y'],
 
             'tem_tensile_modulus_z': young_m['z'],
-            'tem_tensile_viscosity_z': tensile_v['z'],
-            'tem_shear_viscosity_z': shear_v['z'],
             'tem_poisson_ratio_z': poisson['z']
         }
 
@@ -315,26 +301,28 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
     def calc_tensile_modulus(self, stress, strain, time, init_strain=0.01, last_strain=0.03, init2_strain=0.02, last2_strain=0.04,
                             axis='x', printout=False, save=None):
 
+        if not (0 <= init_strain < last_strain):
+            raise ValueError("Invalid strain range")
+
+        if np.max(np.abs(strain)) < last_strain:
+            raise ValueError("Insufficient maximum strain")
+
         init = np.where(abs(strain)>=init_strain)[0][0]
         last = np.where(abs(strain)<=last_strain)[0][-1] + 1
-        init2 = np.where(abs(strain)>=init2_strain)[0][0]
-        last2 = np.where(abs(strain)<=last2_strain)[0][-1] + 1
+        # init2 = np.where(abs(strain)>=init2_strain)[0][0]
+        # last2 = np.where(abs(strain)<=last2_strain)[0][-1] + 1
 
         res = np.polyfit(strain[init:last], stress[init:last], 1)
         y = np.poly1d(res)(strain[init:last])
         grad, k, r, p, std = stats.linregress(strain[init:last], stress[init:last])
-        young = abs(grad * 1e-3)  # MPa -> GPa
-        tensile_viscosity = young * (time[last-1] - time[init]) * 1e-6  # GPa fs -> Pa s
+        young = grad * 1e-3  # MPa -> GPa
 
         # res2 = np.polyfit(strain[init2:last2], stress[init2:last2], 1)
         # y2 = np.poly1d(res2)(strain[init2:last2])
         # grad2, k2, r2, p2, std2 = stats.linregress(strain[init2:last2], stress[init2:last2])
         # young2 = grad2 * 1e-3  # MPa -> GPa
-        # tensile_viscosity2 = young2 * (time[last2-1] - time[init2]) * 1e-6
 
         young_m = young # if young >= young2 else young2
-        tensile_v = tensile_viscosity # if young >= young2 else tensile_viscosity2
-        shear_v = tensile_v/3  # isotoropic
 
         fig, ax = pp.subplots(figsize=(6, 6))
         ax.ticklabel_format(style="sci",  axis="y", scilimits=(0,0))
@@ -345,8 +333,6 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
         ax.set_ylabel('Stress [MPa]', fontsize=12)
 
         output = 'Young\'s modulus (%s axis) = %f [GPa]\n' % (axis, young_m)
-        output += 'Tensile viscosity (%s axis) = %f [Pa s]\n' % (axis, tensile_v)
-        output += 'Shear viscosity (isotoropic) (%s axis) = %f [Pa s]\n' % (axis, shear_v)
 
         if printout:
             pp.show()
@@ -361,10 +347,16 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
             
         pp.close(fig)
         
-        return young_m, tensile_v, shear_v
+        return young_m
 
 
-    def calc_poisson_ratio(self, strain, time, axis='x', init=-1000, last=None, printout=False, save=None):
+    def calc_poisson_ratio(self, strain, time, axis='x', init_strain=0.01, last_strain=0.03, printout=False, save=None):
+        if not (0 <= init_strain < last_strain):
+            raise ValueError("Invalid strain range")
+
+        if np.max(np.abs(strain[axis])) < last_strain:
+            raise ValueError("Insufficient maximum strain")
+
         if axis == 'x':
             axis1 = 'y'
             axis2 = 'z'
@@ -375,29 +367,56 @@ class NEMD_tensile_modulus_analyze(lammps.Analyze):
             axis1 = 'x'
             axis2 = 'y'
 
-        with np.errstate(divide='ignore', invalid='ignore'):
-            poisson_axis1 = -1 * strain[axis1] / strain[axis]
-            poisson_axis2 = -1 * strain[axis2] / strain[axis]
-            poisson = -1 * ((strain[axis1]+strain[axis2])/2) / strain[axis]
+        init = np.where(abs(strain[axis])>=init_strain)[0][0]
+        last = np.where(abs(strain[axis])<=last_strain)[0][-1] + 1
+
+        poisson_ratio1 = -stats.linregress(
+            strain[axis][init:last],
+            strain[axis1][init:last]
+        ).slope
+
+        poisson_ratio2 = -stats.linregress(
+            strain[axis][init:last],
+            strain[axis2][init:last]
+        ).slope
+
+        poisson_ratio = (poisson_ratio1 + poisson_ratio2) / 2
+
+        # with np.errstate(divide='ignore', invalid='ignore'):
+        #     poisson_axis1 = -1 * strain[axis1] / strain[axis]
+        #     poisson_axis2 = -1 * strain[axis2] / strain[axis]
+        #     poisson = -1 * ((strain[axis1]+strain[axis2])/2) / strain[axis]
         
-        time = time * 1e-3  # fs -> ps
-        poisson_ratio = np.nanmean(poisson[init:last])
-        poisson_ratio1 = np.nanmean(poisson_axis1[init:last])
-        poisson_ratio2 = np.nanmean(poisson_axis2[init:last])
+        # time = time * 1e-3  # fs -> ps
+        # poisson_ratio = np.nanmean(poisson[init:last])
+        # poisson_ratio1 = np.nanmean(poisson_axis1[init:last])
+        # poisson_ratio2 = np.nanmean(poisson_axis2[init:last])
 
         fig, ax = pp.subplots(figsize=(6, 6))
         ax.ticklabel_format(style="sci",  axis="y", scilimits=(0,0))
-        ax.plot(time, poisson, linewidth=1.0)
-        ax.set_xlabel('Time [ps]', fontsize=12)
-        ax.set_ylabel('Poisson\'s ratio', fontsize=12)
+        ax.scatter(
+            strain[axis][init:last],
+            strain[axis1][init:last],
+            s=5,
+            label=axis1
+        )
+        ax.scatter(
+            strain[axis][init:last],
+            strain[axis2][init:last],
+            s=5,
+            label=axis2
+        )       
+        ax.set_xlabel('Axial strain', fontsize=12)
+        ax.set_ylabel('Transverse strain', fontsize=12)
+        ax.legend()
 
-        output = 'Poisson\'s ratio (tensile in %s axis) = %f' % (axis, poisson_ratio)
-        output = 'Poisson\'s ratio %s (tensile in %s axis) = %f' % (axis1, axis, poisson_ratio1)
-        output = 'Poisson\'s ratio %s (tensile in %s axis) = %f' % (axis2, axis, poisson_ratio2)
+        output = 'Poisson\'s ratio (tensile in %s axis) = %f\n' % (axis, poisson_ratio)
+        output += 'Poisson\'s ratio %s (tensile in %s axis) = %f\n' % (axis1, axis, poisson_ratio1)
+        output += 'Poisson\'s ratio %s (tensile in %s axis) = %f' % (axis2, axis, poisson_ratio2)
 
         if printout:
             pp.show()
-            utils.print(output, level=1)
+            utils.radon_print(output, level=1)
 
         if save:
             if not os.path.exists(save):
@@ -463,9 +482,9 @@ class NEMD_uniaxial_tensile(NEMD_tensile):
             Unwrapped coordinates (float, numpy.ndarray, angstrom)
             Cell length (float, numpy.ndarray, angstrom)
         """
-        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file[axis]))
+        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
-        lmp.make_dat(self.mol, file_name=self.dat_file[axis], confId=confId)
+        lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         md = self.uniaxial(step=step, time_step=time_step, scale=scale, axis=axis, n_split=n_split,
                         temp=temp, f_temp=f_temp, press=press, f_press=f_press, **kwargs)
@@ -480,9 +499,9 @@ class NEMD_uniaxial_tensile(NEMD_tensile):
     def make_lammps_input(self, confId=0, step=50000000, time_step=1.0, scale=5.0, axis='x', n_split=1,
                 temp=300.0, f_temp=None, press=1.0, f_press=None, omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
 
-        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file[axis]))
+        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
-        lmp.make_dat(self.mol, file_name=self.dat_file[axis], confId=confId)
+        lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         md = self.uniaxial(step=step, time_step=time_step, scale=scale, axis=axis, n_split=n_split,
                         temp=temp, f_temp=f_temp, press=press, f_press=f_press, **kwargs)
@@ -527,9 +546,9 @@ class NEMD_uniaxial_tensile_rough(NEMD_tensile):
             Unwrapped coordinates (float, numpy.ndarray, angstrom)
             Cell length (float, numpy.ndarray, angstrom)
         """
-        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file[axis]))
+        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
-        lmp.make_dat(self.mol, file_name=self.dat_file[axis], confId=confId)
+        lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         md = self.uniaxial(step=step, time_step=time_step, scale=scale, axis=axis, n_split=n_split,
                         temp=temp, f_temp=f_temp, press=press, f_press=f_press, **kwargs)
@@ -547,9 +566,9 @@ class NEMD_uniaxial_tensile_rough(NEMD_tensile):
     def make_lammps_input(self, confId=0, step=50000000, time_step=1.0, scale=5.0, axis='x', n_split=1,
                 temp=300.0, f_temp=None, press=1.0, f_press=None, omp=1, mpi=1, gpu=0, intel='auto', **kwargs):
 
-        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file[axis]))
+        utils.MolToPDBFile(self.mol, os.path.join(self.work_dir, self.pdb_file))
         lmp = lammps.LAMMPS(work_dir=self.work_dir, solver_path=self.solver_path)
-        lmp.make_dat(self.mol, file_name=self.dat_file[axis], confId=confId)
+        lmp.make_dat(self.mol, file_name=self.dat_file, confId=confId)
 
         md = self.uniaxial(step=step, time_step=time_step, scale=scale, axis=axis, n_split=n_split,
                         temp=temp, f_temp=f_temp, press=press, f_press=f_press, **kwargs)
