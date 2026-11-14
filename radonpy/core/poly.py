@@ -521,7 +521,7 @@ def terminate_mols(poly, mol1, mol2=None, confId=0, bond_length=1.5, dihedral=np
 # Polymer chain generator with self-avoiding random walk
 ##########################################################
 def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None, headhead=False, confId=0,
-            dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, tacticity=None,
+            dist_min=0.7, do_ring_check=True, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, tacticity=None,
             res_name_init='INI', res_name=None, label=None, label_init=1, ff=None, work_dir=None, omp=1, mpi=0, gpu=0, mp_idx=None):
     """
     poly.random_walk_polymerization
@@ -667,12 +667,12 @@ def random_walk_polymerization(mols, m_idx, chi_inv, start_num=0, init_poly=None
             else:
                 check_3d = check_3d_structure_poly(poly, mol_c, dmat, dist_min=dist_min, check_bond_length=False)
 
-            if check_3d and has_ring:
+            if check_3d and has_ring and do_ring_check:
                 check_3d, tri_coord_new, bond_coord_new = check_3d_bond_ring_intersection(poly, mon=mol_c,
                                                                     tri_coord=tri_coord, bond_coord=bond_coord)
 
             if check_3d:
-                if has_ring:
+                if has_ring and do_ring_check:
                     tri_coord = tri_coord_new
                     bond_coord = bond_coord_new
                 break
@@ -4253,8 +4253,8 @@ def branch_polymerization_rw(poly_mol, mols, n, confId=0, n_dist='uniform',
                     chi_inv = [False]
                     tactic = None
                 else:
-                    m_idx = poly.gen_monomer_array(len(mols[idx]), n_array[i], copoly=copoly_type)
-                    chi_inv, check_chi = poly.gen_chiral_inv_array(mols[idx], m_idx, tacticity=tacticity, atac_ratio=atac_ratio)
+                    m_idx = gen_monomer_array(len(mols[idx]), n_array[i], copoly=copoly_type)
+                    chi_inv, check_chi = gen_chiral_inv_array(mols[idx], m_idx, tacticity=tacticity, atac_ratio=atac_ratio)
                     if not check_chi:
                         tactic = None
                     else:
@@ -4266,10 +4266,10 @@ def branch_polymerization_rw(poly_mol, mols, n, confId=0, n_dist='uniform',
                 # 3rd arg.: Whether to perform chiral inversion (List of boolean)
                 # label: List of label to be used as connecting points
                 #        [[head label of mol1, tail label of mol1], [head label of mol2, tail label of mol2], ...]
-                bpoly = poly.random_walk_polymerization(mols[idx], m_idx, chi_inv, confId=confId, label=label, init_poly=bpoly,
+                bpoly = random_walk_polymerization(mols[idx], m_idx, chi_inv, confId=confId, label=label, init_poly=bpoly,
                                                         label_init=pos, tacticity=tactic, **kwargs)
             else:
-                poly.set_linker_flag(bpoly, label=pos)
+                set_linker_flag(bpoly, label=pos)
                 bpoly.GetAtomWithIdx(bpoly.GetIntProp('tail_idx')).SetIsotope(0)
 
     dt2 = datetime.datetime.now()
@@ -4479,8 +4479,8 @@ def calc_n_from_mol_weight(mols, mw, ratio=[1.0], terminal1=None, terminal2=None
 
 
 # For ladder polymer extension
-def connect_mols_dev(mol1, mol2, bond_length=1.5, dihedral=np.pi, random_rot=False, dih_type='monomer', set_linker=True, label1=1, label2=1,
-                headhead=False, tailtail=False, confId1=0, confId2=0, res_name_1='RU0', res_name_2='RU0', ladder=False, ladder_label1=2, ladder_label2=3):
+def connect_mols_dev(mol1, mol2, bond_length=1.5, dihedral=np.pi, random_rot=False, dih_type='monomer', set_linker=True, label1=[1, 1], label2=[1, 1],
+                headhead=False, tailtail=False, confId1=0, confId2=0, res_name_1='RU0', res_name_2='RU0', ladder=False, ladder_label1=3, ladder_label2=4):
     """
     poly.connect_mols
 
@@ -4507,10 +4507,10 @@ def connect_mols_dev(mol1, mol2, bond_length=1.5, dihedral=np.pi, random_rot=Fal
     if mol2 is None: return mol1
 
     # Initialize
-    if headhead: set_linker_flag(mol1, reverse=True, label=label1)
-    elif set_linker: set_linker_flag(mol1, label=label1)
-    if tailtail and not headhead: set_linker_flag(mol2, reverse=True, label=label2)
-    elif set_linker: set_linker_flag(mol2, label=label2)
+    if headhead: set_linker_flag_dev(mol1, reverse=True, label=label1)
+    elif set_linker: set_linker_flag_dev(mol1, label=label1)
+    if tailtail and not headhead: set_linker_flag_dev(mol2, reverse=True, label=label2)
+    elif set_linker: set_linker_flag_dev(mol2, label=label2)
 
     if mol1.GetIntProp('tail_idx') < 0 or mol1.GetIntProp('tail_ne_idx') < 0:
         utils.radon_print('Cannot connect_mols because mol1 does not have a tail linker atom.', level=2)
@@ -4676,11 +4676,284 @@ def connect_mols_dev(mol1, mol2, bond_length=1.5, dihedral=np.pi, random_rot=Fal
     return mol
 
 
+def set_linker_flag_dev(mol, reverse=False, label=[1, 1]):
+    """
+    poly.set_linker_flag
+
+    Args:
+        mol: RDkit Mol object
+        reverse: Reversing head and tail (boolean)
+
+    Returns:
+        boolean
+    """
+
+    flag = False
+    head_flag = False
+    tail_flag = False
+    mol.SetIntProp('head_idx', -1)
+    mol.SetIntProp('tail_idx', -1)
+    mol.SetIntProp('head_ne_idx', -1)
+    mol.SetIntProp('tail_ne_idx', -1)
+
+    for atom in mol.GetAtoms():
+        atom.SetBoolProp('linker', False)
+        atom.SetBoolProp('head', False)
+        atom.SetBoolProp('tail', False)
+        atom.SetBoolProp('head_neighbor', False)
+        atom.SetBoolProp('tail_neighbor', False)
+        if label[0] == label[1]:
+            if (atom.GetSymbol() == "H" and atom.GetIsotope() == label[0]+2) or \
+               (atom.GetSymbol() == "*" and atom.HasProp('ff_type') and atom.GetProp('ff_type') != "MTIP") or \
+               (atom.GetSymbol() == "*" and not atom.HasProp('ff_type')) or \
+               (atom.HasProp('terminal') and atom.GetBoolProp('terminal')):
+                atom.SetBoolProp('linker', True)
+                if not flag:
+                    mol_head_idx = atom.GetIdx()
+                    mol_tail_idx = atom.GetIdx()
+                    flag = True
+                else:
+                    if reverse:
+                        mol_head_idx = atom.GetIdx()
+                    else:
+                        mol_tail_idx = atom.GetIdx()
+
+        else:
+            if (atom.GetSymbol() == "H" and atom.GetIsotope() == label[0]+2):
+                atom.SetBoolProp('linker', True)
+                if not head_flag:
+                    if reverse:
+                        mol_tail_idx = atom.GetIdx()
+                    else:
+                        mol_head_idx = atom.GetIdx()
+                    head_flag = True
+                    #print('head_flag')
+
+            elif (atom.GetSymbol() == "H" and atom.GetIsotope() == label[1]+2):
+                atom.SetBoolProp('linker', True)
+                if not tail_flag:
+                    if reverse:
+                        mol_head_idx = atom.GetIdx()
+                    else:
+                        mol_tail_idx = atom.GetIdx()
+                    tail_flag = True
+                    #print('tail_flag')
+
+    if label[0] == label[1] and not flag:
+        return False
+    if label[0] != label[1] and (not head_flag or not tail_flag):
+        return False
+
+    mol.SetIntProp('head_idx', mol_head_idx)
+    mol.GetAtomWithIdx(mol_head_idx).SetBoolProp('head', True)
+
+    mol.SetIntProp('tail_idx', mol_tail_idx)
+    mol.GetAtomWithIdx(mol_tail_idx).SetBoolProp('tail', True)
+
+    head_ne_atom = mol.GetAtomWithIdx(mol_head_idx).GetNeighbors()[0]
+    mol.SetIntProp('head_ne_idx', head_ne_atom.GetIdx())
+    head_ne_atom.SetBoolProp('head_neighbor', True)
+
+    tail_ne_atom = mol.GetAtomWithIdx(mol_tail_idx).GetNeighbors()[0]
+    mol.SetIntProp('tail_ne_idx', tail_ne_atom.GetIdx())
+    tail_ne_atom.SetBoolProp('tail_neighbor', True)
+
+    return True
+
+
+def set_mainchain_flag_dev(mol, label=[1, 1]):
+
+    for atom in mol.GetAtoms():
+        atom.SetBoolProp('main_chain', False)
+    
+    linker_result = set_linker_flag_dev(mol, label=label)
+    terminal_result = set_terminal_idx(mol)
+    if not linker_result and terminal_result == 0:
+        return False
+
+    # print('label', label)
+    # print('head_idx', mol.GetIntProp('head_idx'))
+    # print('tail_idx', mol.GetIntProp('tail_idx'))
+    # print('head_ne_idx', mol.GetIntProp('head_ne_idx'))
+    # print('tail_ne_idx', mol.GetIntProp('tail_ne_idx'))
+
+    if terminal_result >= 2:
+        if mol.GetIntProp('terminal_ne_idx1') == mol.GetIntProp('terminal_ne_idx2'):
+            path = [mol.GetIntProp('terminal_ne_idx1')]
+        else:
+            path = Chem.GetShortestPath(mol, mol.GetIntProp('terminal_ne_idx1'), mol.GetIntProp('terminal_ne_idx2'))
+    elif mol.GetIntProp('head_idx') == mol.GetIntProp('tail_idx'):
+        path = Chem.GetShortestPath(mol, mol.GetIntProp('head_idx'), mol.GetIntProp('head_ne_idx'))
+    else:
+        path = Chem.GetShortestPath(mol, mol.GetIntProp('head_idx'), mol.GetIntProp('tail_idx'))
+
+    for idx in path:
+        atom = mol.GetAtomWithIdx(idx)
+        atom.SetBoolProp('main_chain', True)
+        for batom in atom.GetNeighbors():
+            if batom.GetTotalDegree() == 1:  # Expect -H, =O, =S, -F, -Cl, -Br, -I
+                batom.SetBoolProp('main_chain', True)
+    
+    rings = Chem.GetSymmSSSR(mol)
+    m_rings = []
+    for ring in rings:
+        dup = list(set(path) & set(ring))
+        if len(dup) > 0:
+            m_rings.append(ring)
+            for idx in ring:
+                atom = mol.GetAtomWithIdx(idx)
+                atom.SetBoolProp('main_chain', True)
+                for batom in atom.GetNeighbors():
+                    if batom.GetTotalDegree() == 1:  # Expect -H, =O, =S, -F, -Cl, -Br, -I
+                        batom.SetBoolProp('main_chain', True)
+
+    for m_ring in m_rings:
+        for ring in rings:
+            dup = list(set(m_ring) & set(ring))
+            if len(dup) > 0:
+                for idx in ring:
+                    atom = mol.GetAtomWithIdx(idx)
+                    atom.SetBoolProp('main_chain', True)
+                    for batom in atom.GetNeighbors():
+                        if batom.GetTotalDegree() == 1:  # Expect -H, =O, =S, -F, -Cl, -Br, -I
+                            batom.SetBoolProp('main_chain', True)
+
+    return True
+
+
+def gen_chiral_inv_array_dev(mols, mon_array, init_poly=None, tacticity='atactic', atac_ratio=0.5, label_list=None):
+    """
+    poly.gen_chiral_inv_array
+
+    Chiral inversion array generator for the polymer chain generators
+    """
+    mon_array = np.array(mon_array)
+    chi_inv = np.full(len(mon_array), False)
+    chiral_poly = []
+    chiral_poly_last = 0
+    chiral_mon = []
+    n_mon = []
+    check_chi = True
+
+    if label_list is None:
+        label_list = [[1, 1] for x in range(len(mols))]
+    else:
+        if len(mols) != len(label_list):
+            utils.radon_print('Inconsistency length of mols and label_list', level=3)
+
+    if type(init_poly) is Chem.Mol:
+        chiral_poly = get_chiral_list(init_poly)
+        chiral_poly_last = chiral_poly[-1] if len(chiral_poly) > 0 else 0
+
+    for i, mol in enumerate(mols):
+        if i == 0:
+            n_mon.append(len(mon_array) - np.count_nonzero(mon_array))
+        else:
+            n_mon.append(np.count_nonzero(mon_array == i))
+        num_chiral = check_chiral_monomer_dev(mol, label=label_list[i])
+        if num_chiral == 0:
+            chiral_mon.append(0)
+        elif num_chiral == 1:
+            chiral_mon.append(get_chiral_list_dev(mol, label=label_list[i])[0])
+        else:
+            chiral_mon.append(0)
+            if check_chi:
+                utils.radon_print(
+                    'Found multiple chiral center in the mainchain of polymer repeating unit. The chirality control is turned off.',
+                    level=1)
+                check_chi = False
+
+    if tacticity == 'isotactic':
+        flag = chiral_poly_last
+        for i, mon_idx in enumerate(mon_array):
+            if flag == 0 and chiral_mon[mon_idx] != 0:
+                flag = chiral_mon[mon_idx]
+            if chiral_mon[mon_idx] == 0:
+                chi_inv[i] = False
+            elif flag == chiral_mon[mon_idx]:
+                chi_inv[i] = False
+            else:
+                chi_inv[i] = True
+
+    elif tacticity == 'syndiotactic':
+        flag = chiral_poly_last
+        for i, mon_idx in enumerate(mon_array):
+            if chiral_mon[mon_idx] == 0:
+                chi_inv[i] = False
+            elif flag == chiral_mon[mon_idx]:
+                chi_inv[i] = True
+                flag = 2 if chiral_mon[mon_idx] == 1 else 1
+            else:
+                chi_inv[i] = False
+                flag = 1 if chiral_mon[mon_idx] == 1 else 2
+
+    elif tacticity == 'atactic':
+        chi_inv_list = []
+        for n, c in zip(n_mon, chiral_mon):
+            chi_mon_inv = np.full(n, False)
+            if c == 0:
+                chi_inv_list.append(list(chi_mon_inv))
+            elif c == 1:
+                n_inv = n*atac_ratio
+                chi_mon_inv[int(n_inv):] = True
+                np.random.shuffle(chi_mon_inv)
+                chi_inv_list.append(list(chi_mon_inv))
+            else:
+                n_inv = n*(1-atac_ratio)
+                chi_mon_inv[int(n_inv):] = True
+                np.random.shuffle(chi_mon_inv)
+                chi_inv_list.append(list(chi_mon_inv))
+
+        for i, mon_idx in enumerate(mon_array):
+            chi_inv[i] = chi_inv_list[mon_idx].pop()
+
+    else:
+        utils.radon_print('%s is illegal input for tacticity.' % str(tacticity), level=3)
+
+    return chi_inv, check_chi
+
+
+def check_chiral_monomer_dev(mol, label=[1,1]):
+    n_chiral = 0
+    ter = utils.mol_from_smiles('*[C]')
+    mol_c = utils.deepcopy_mol(mol)
+    mol_c = terminate_mols(mol_c, ter, random_rot=True)
+    set_mainchain_flag_dev(mol_c, label=label)
+    for atom in mol_c.GetAtoms():
+        if (int(atom.GetChiralTag()) == 1 or int(atom.GetChiralTag()) == 2) and atom.GetBoolProp('main_chain'):
+            n_chiral += 1
+
+    return n_chiral
+
+
+def get_chiral_list_dev(mol, confId=0, label=[1,1]):
+    mol_c = utils.deepcopy_mol(mol)
+    set_linker_flag_dev(mol_c, label=label)
+    if mol_c.GetIntProp('head_idx') >= 0 and mol_c.GetIntProp('tail_idx') >= 0:
+        ter = utils.mol_from_smiles('*[C]')
+        mol_c = terminate_mols(mol_c, ter, random_rot=True)
+    set_mainchain_flag_dev(mol_c, label=label)
+
+    Chem.AssignStereochemistryFrom3D(mol_c, confId=confId)
+    chiral_centers = np.array(Chem.FindMolChiralCenters(mol_c))
+
+    if len(chiral_centers) == 0:
+        return []
+
+    chiral_centers = [int(x) for x in chiral_centers[:, 0]]
+    chiral_list = []
+    for atom in mol_c.GetAtoms():
+        if atom.GetBoolProp('main_chain') and atom.GetIdx() in chiral_centers:
+            chiral_list.append(int(atom.GetChiralTag()))
+    chiral_list = np.array(chiral_list)
+
+    return chiral_list
+
 
 def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=None, headhead=False, confId=0,
             dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, tacticity=None,
-            res_name_init='INI', res_name=None, label=None, label_init=1, ff=None, work_dir=None, omp=1, mpi=0, gpu=0, mp_idx=None,
-            ladder=False, ladder_label1=2, ladder_label2=3):
+            res_name_init='INI', res_name=None, label=None, label_init=[1, 1], ff=None, work_dir=None, omp=1, mpi=0, gpu=0, mp_idx=None,
+            do_ring_check=True, ladder=False, ladder_label1=3, ladder_label2=4):
     """
     poly.random_walk_polymerization
 
@@ -4740,7 +5013,7 @@ def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=
 
     if type(init_poly) == Chem.Mol:
         poly = utils.deepcopy_mol(init_poly)
-        set_linker_flag(poly, label=label_init)
+        set_linker_flag_dev(poly, label=label_init)
         poly_copy = []
         sssr_tmp = Chem.GetSSSR(poly)
         if type(sssr_tmp) is int:
@@ -4750,7 +5023,7 @@ def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=
             has_ring = True
 
     for i, mol in enumerate(mols):
-        set_linker_flag(mol, label=label[i][0])
+        set_linker_flag_dev(mol, label=label[i])
         mols_copy.append(utils.deepcopy_mol(mol))
         mols_inv.append(calc.mirror_inversion_mol(mol))
         sssr_tmp = Chem.GetSSSR(mol)
@@ -4784,21 +5057,27 @@ def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=
         for r in range(retry_step*(1+retry_opt_step)):
             check_3d = False
             if i > 0:
-                label1 = label[m_idx[i-1]][1]
+                label1 = label[m_idx[i-1]]
             elif type(init_poly) == Chem.Mol:
                 label1 = label_init
             else:
-                label1 = 1
+                label1 = [1, 1]
 
-            if headhead and i % 2 == 0:
-                poly = connect_mols_dev(poly, mol_c, tailtail=True, random_rot=True, set_linker=True,
+            if headhead:
+                if i % 2 == 0:
+                    poly = connect_mols_dev(poly, mol_c, tailtail=True, random_rot=True, set_linker=True,
                             confId2=confId, res_name_1=res_name_1, res_name_2=res_name[m_idx[i]],
-                            label1=label1, label2=label[m_idx[i]][1],
+                            label1=label1, label2=label[m_idx[i]],
+                            ladder=ladder, ladder_label1=ladder_label1, ladder_label2=ladder_label2)
+                else:
+                    poly = connect_mols_dev(poly, mol_c, headhead=True, random_rot=True, set_linker=True,
+                            confId2=confId, res_name_1=res_name_1, res_name_2=res_name[m_idx[i]],
+                            label1=label1, label2=label[m_idx[i]],
                             ladder=ladder, ladder_label1=ladder_label1, ladder_label2=ladder_label2)
             else:
                 poly = connect_mols_dev(poly, mol_c, random_rot=True, set_linker=True,
                             confId2=confId, res_name_1=res_name_1, res_name_2=res_name[m_idx[i]],
-                            label1=label1, label2=label[m_idx[i]][0],
+                            label1=label1, label2=label[m_idx[i]],
                             ladder=ladder, ladder_label1=ladder_label1, ladder_label2=ladder_label2)
 
             if i == 0 and init_poly is None:
@@ -4827,12 +5106,12 @@ def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=
             else:
                 check_3d = check_3d_structure_poly(poly, mol_c, dmat, dist_min=dist_min, check_bond_length=False)
 
-            if check_3d and has_ring:
+            if check_3d and has_ring and do_ring_check:
                 check_3d, tri_coord_new, bond_coord_new = check_3d_bond_ring_intersection(poly, mon=mol_c,
                                                                     tri_coord=tri_coord, bond_coord=bond_coord)
 
             if check_3d:
-                if has_ring:
+                if has_ring and do_ring_check:
                     tri_coord = tri_coord_new
                     bond_coord = bond_coord_new
                 break
@@ -4887,8 +5166,8 @@ def random_walk_polymerization_dev(mols, m_idx, chi_inv, start_num=0, init_poly=
 
 def polymerize_ladder_rw(mol, n, init_poly=None, headhead=False, confId=0, tacticity='atactic', atac_ratio=0.5,
             dist_min=0.7, retry=100, rollback=5, rollback_shaking=False, retry_step=200, retry_opt_step=0, ter1=None, ter2=None,
-            label=None, label_ter1=1, label_ter2=1, res_name='RU0', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None,
-            ladder_label1=2, ladder_label2=3):
+            label=[1,2], label_ter1=1, label_ter2=1, res_name='RU0', ff=None, work_dir=None, omp=0, mpi=1, gpu=0, mp_idx=None,
+            do_ring_check=True, ladder_label1=3, ladder_label2=4):
     """
     poly.polymerize_ladder_rw
 
@@ -4921,10 +5200,15 @@ def polymerize_ladder_rw(mol, n, init_poly=None, headhead=False, confId=0, tacti
     dt1 = datetime.datetime.now()
     utils.radon_print('Start poly.polymerize_rw.', level=1)
 
+    if label is None:
+        label = [1, 2]
+
     m_idx = gen_monomer_array(1, n)
-    chi_inv, check_chi = gen_chiral_inv_array([mol], m_idx, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio)
-    if not check_chi:
-        tacticity = None
+    #chi_inv, check_chi = gen_chiral_inv_array_dev([mol], m_idx, init_poly=init_poly, tacticity=tacticity, atac_ratio=atac_ratio, label_list=[label])
+    #if not check_chi:
+    #    tacticity = None
+    chi_inv = [False]*n
+    tacticity = None
 
     if type(ter1) is Chem.Mol:
         if ter2 is None:
@@ -4933,20 +5217,17 @@ def polymerize_ladder_rw(mol, n, init_poly=None, headhead=False, confId=0, tacti
         res_name = [res_name, 'TU0', 'TU1']
         m_idx = [1, *m_idx, 2]
         chi_inv = [False, *chi_inv, False]
-        if label is None:
-            label = [1, 1]
         label = [label, [label_ter1, label_ter1], [label_ter2, label_ter2]]
     else:
         mols = [mol]
         res_name = [res_name]
-        if label is not None:
-            label = [label]
+        label = [label]
 
     poly = random_walk_polymerization_dev(
         mols, m_idx, chi_inv, start_num=0, init_poly=init_poly, headhead=headhead, confId=confId,
         dist_min=dist_min, retry=retry, rollback=rollback, rollback_shaking=rollback_shaking, retry_step=retry_step, retry_opt_step=retry_opt_step,
         tacticity=tacticity, res_name=res_name, label=label, ff=ff, work_dir=work_dir, omp=omp, mpi=mpi, gpu=gpu, mp_idx=mp_idx,
-        ladder=True, ladder_label1=ladder_label1, ladder_label2=ladder_label2
+        do_ring_check=do_ring_check, ladder=True, ladder_label1=ladder_label1, ladder_label2=ladder_label2
     )
 
     if type(ter1) is Chem.Mol:
@@ -4957,92 +5238,508 @@ def polymerize_ladder_rw(mol, n, init_poly=None, headhead=False, confId=0, tacti
     return poly
 
 
-def mol_from_amino_residues(residues):
-
-    f_dir = os.path.dirname(os.path.realpath(__file__))
-
-    mols = [utils.mol_from_pdb(os.path.join(f_dir, 'amino', res + '.pdb'), charge=True)
-            for res in residues]
-
-    mol = block_copolymerize_mols(mols, 1, tacticity='isotactic')
-    
-    return mol
 
 
-def mol_from_amino_residues_new(residues, his_type='HIS', his_ratio=0.8):
+
+
+
+
+
+from typing import List
+import hashlib
+
+# Standard three-letter residue names
+STANDARD_RESIDUES = {
+    "A": "ALA",
+    "R": "ARG",
+    "N": "ASN",
+    "D": "ASP",
+    "C": "CYS",
+    "Q": "GLN",
+    "E": "GLU",
+    "G": "GLY",
+    "H": "HIE",  # overwritten dynamically
+    "I": "ILE",
+    "L": "LEU",
+    "K": "LYS",
+    "M": "MET",
+    "F": "PHE",
+    "P": "PRO",
+    "S": "SER",
+    "T": "THR",
+    "W": "TRP",
+    "Y": "TYR",
+    "V": "VAL",
+}
+
+
+def mol_from_amino_residues(residues, work_dir=None, rule='charge_balanced', model='amber', rw=True):
+    dt1 = datetime.datetime.now()
+    utils.radon_print('Start poly.mol_from_amino_residues.', level=1)
 
     f_dir = os.path.dirname(os.path.realpath(__file__))
 
     if isinstance(residues, str):
-        residues = amino1to3(residues, his_type=his_type)
+        residues = amino1to3(residues, rule=rule, cap=False)
 
-    # mols = [utils.mol_from_pdb(os.path.join(f_dir, 'amino', res + '.pdb'), charge=True)
-    #         for res in residues]
+    res_set = set(residues[1:-1])
+    res_Nter = residues[0]
+    res_Cter = residues[-1]
+    res_name = list(res_set)
+    n = len(res_name)
 
-    mols = []
-    for res in residues:
-        if res == 'HIS':
-            res = 'HIE' if np.random.uniform(0, 1) < his_ratio else 'HID'
-        mols.append(utils.mol_from_pdb(os.path.join(f_dir, 'amino', res + '.pdb'), charge=True))
-
-    mol = block_copolymerize_mols(mols, 1, tacticity='isotactic')
-    
-    return mol
-
-
-def amino1to3(seq, mode='aq', his_type='HIS'):
-    if mode == 'aq':
-        code_dic = {
-            'A': 'ALA',
-            'C': 'CYS',
-            'D': 'ASP',
-            'E': 'GLU',
-            'F': 'PHE',
-            'G': 'GLY',
-            'H': his_type,
-            'I': 'ILE',
-            'K': 'LYS',
-            'L': 'LEU',
-            'M': 'MET',
-            'N': 'ASN',
-            'P': 'PRO',
-            'Q': 'GLN',
-            'R': 'ARG',
-            'S': 'SER',
-            'T': 'THR',
-            'V': 'VAL',
-            'W': 'TRP',
-            'Y': 'TYR'
-        }
-    elif mode == 'neutral':
-        code_dic = {
-            'A': 'ALA',
-            'C': 'CYS',
-            'D': 'ASH',
-            'E': 'GLU',
-            'F': 'PHE',
-            'G': 'GLY',
-            'H': his_type,
-            'I': 'ILE',
-            'K': 'LYS',
-            'L': 'LEU',
-            'M': 'MET',
-            'N': 'ASN',
-            'P': 'PRO',
-            'Q': 'GLN',
-            'R': 'ARG',
-            'S': 'SER',
-            'T': 'THR',
-            'V': 'VAL',
-            'W': 'TRP',
-            'Y': 'TYR'
-        }
+    if model == 'amber':
+        mols = [utils.mol_from_pdb(os.path.join(f_dir, 'amino', res + '.pdb'), charge=True)
+                for res in res_set]
+        mol_Nter = utils.JSONToMol(os.path.join(f_dir, 'amino', 'N'+res_Nter + '.pdb'), charge=True)
+        mol_Cter = utils.JSONToMol(os.path.join(f_dir, 'amino', 'C'+res_Cter + '.pdb'), charge=True)
+    elif model == 'gaff2':
+        mols = [utils.JSONToMol(os.path.join(f_dir, 'amino_gaff2', 'monomer_' + res + '.json'))
+                for res in res_set]
+        mol_Nter = utils.JSONToMol(os.path.join(f_dir, 'amino_gaff2', 'monomer_N' + res_Nter + '.json'))
+        mol_Cter = utils.JSONToMol(os.path.join(f_dir, 'amino_gaff2', 'monomer_C' + res_Cter + '.json'))
     else:
-        utils.radon_print('Mode %s is not available in poly.amino1to3' % mode, level=3)
+        utils.radon_print("model must be 'amber' or 'gaff2'.", level=3)
+
+    # if rw:
+    #     pep = block_copolymerize_rw(mols[1:-1], [1]*len(mols[1:-1]), ter1=res_Nter, ter2=res_Cter, tacticity='isotactic')
+    # else:
+    #     pep = block_copolymerize_mols(mols, [1]*len(mols), tacticity='isotactic')
+
+    m_idx = [res_name.index(x) for x in residues[1:-1]]
+    chi_inv = [False] * len(residues[1:-1])
+        
+    mols = [*mols, mol_Nter, mol_Cter]
+    res_name = [*res_name, 'TU0', 'TU1']
+    m_idx = [n, *m_idx, n+1]
+    chi_inv = [False, *chi_inv, False]
+
+    pep = random_walk_polymerization(mols, m_idx, chi_inv, tacticity='isotactic', res_name=res_name, work_dir=work_dir)
+
+    set_terminal_idx(pep)
+    dt2 = datetime.datetime.now()
+    utils.radon_print('Normal termination of poly.mol_from_amino_residues. Elapsed time = %s' % str(dt2-dt1), level=1)
     
-    amino_array = [code_dic[s] for s in seq]
-    amino_array[0] = 'N'+amino_array[0]
-    amino_array[-1] = 'C'+amino_array[-1]
-    
-    return amino_array
+    return pep
+
+
+def _hash_score(
+    sequence: str,
+    seed: int,
+    tag: str,
+    position: int,
+) -> int:
+    """
+    Generate a deterministic pseudo-random integer from
+    sequence + seed + tag + residue position.
+    """
+    key = f"{seed}|{sequence}|{tag}|{position}"
+    digest = hashlib.sha256(key.encode("utf-8")).digest()
+
+    return int.from_bytes(digest, byteorder="big")
+
+
+def _select_positions(
+    positions: List[int],
+    n_select: int,
+    sequence: str,
+    seed: int,
+    tag: str,
+) -> set:
+    """
+    Deterministically select n_select positions from positions.
+
+    Selection looks random, but is fully reproducible for the same
+    sequence and seed.
+    """
+    if n_select <= 0:
+        return set()
+
+    if n_select >= len(positions):
+        return set(positions)
+
+    ranked = sorted(
+        positions,
+        key=lambda i: _hash_score(sequence, seed, tag, i),
+    )
+
+    return set(ranked[:n_select])
+
+
+def _neutral_histidine(
+    sequence: str,
+    seed: int,
+    position: int,
+) -> str:
+    """
+    Deterministically assign a neutral histidine as HIE or HID
+    with approximately 50:50 probability.
+    """
+    score = _hash_score(
+        sequence,
+        seed,
+        "histidine_tautomer",
+        position,
+    )
+
+    # approximately HIE:HID = 70:30
+    return "HIE" if score % 100 < 70 else "HID"
+
+
+def amino1to3(
+    sequence: str,
+    rule: str = "charge_balanced",
+    cap: bool = True,
+    seed: int = 86,
+) -> List[str]:
+    """
+    Convert a one-letter amino-acid sequence to three-letter residue
+    names using a specified protonation rule.
+
+    Parameters
+    ----------
+    sequence : str
+        Amino-acid sequence using one-letter codes.
+
+    rule : {"charge_balanced", "neutral", "charged"}
+        Protonation rule.
+
+        "charge_balanced"
+            Maximum-ionized charge-balanced model.
+
+            Acidic residues:
+                ASP (-1)
+                GLU (-1)
+
+            Basic residues, in priority order:
+                ARG (+1) > LYS (+1) > HIP (+1)
+
+            The number of positive and negative charges is equal:
+
+                N_charge = min(
+                    N_D + N_E,
+                    N_R + N_K + N_H
+                )
+
+            ARG is used first, followed by LYS and then HIP.
+
+            Excess acidic residues become neutral:
+                D -> ASH
+                E -> GLH
+
+            Excess basic residues become neutral:
+                R -> ARN
+                K -> LYN
+                H -> HID/HIE
+
+            Which individual residues are charged is selected
+            deterministically from sequence + seed.
+
+        "neutral"
+            All D/E/H/K/R side chains are neutral:
+
+                D -> ASH
+                E -> GLH
+                H -> HID or HIE
+                K -> LYN
+                R -> ARN
+
+            Neutral histidines are assigned HID/HIE deterministically
+            with approximately 50:50 probability.
+
+        "charged"
+            D/E/H/K/R are all placed in charged states:
+
+                D -> ASP (-1)
+                E -> GLU (-1)
+                H -> HIP (+1)
+                K -> LYS (+1)
+                R -> ARG (+1)
+
+            Cys and Tyr remain neutral.
+
+            The total system charge is not necessarily zero.
+
+    seed : int, default=0
+        Fixed seed used for deterministic pseudo-random assignment.
+
+        The same sequence and seed always produce the same result.
+
+    Returns
+    -------
+    list[str]
+        Three-letter residue names.
+    """
+
+    # --------------------------------------------------------------
+    # Clean and validate sequence
+    # --------------------------------------------------------------
+    sequence = (
+        sequence.upper()
+        .replace(" ", "")
+        .replace("\n", "")
+        .replace("\t", "")
+    )
+
+    if rule not in {
+        "charge_balanced",
+        "neutral",
+        "charged",
+    }:
+        raise ValueError(
+            "rule must be 'charge_balanced', "
+            "'neutral', or 'charged'."
+        )
+
+    unknown = sorted(
+        set(sequence) - set(STANDARD_RESIDUES)
+    )
+
+    if unknown:
+        raise ValueError(
+            f"Unknown one-letter amino-acid codes: {unknown}"
+        )
+
+    # --------------------------------------------------------------
+    # 1. All-neutral model
+    # --------------------------------------------------------------
+    if rule == "neutral":
+
+        residues = []
+
+        for i, aa in enumerate(sequence):
+
+            if aa == "D":
+                residues.append("ASH")
+
+            elif aa == "E":
+                residues.append("GLH")
+
+            elif aa == "R":
+                residues.append("ARN")
+
+            elif aa == "K":
+                residues.append("LYN")
+
+            elif aa == "H":
+                residues.append(
+                    _neutral_histidine(
+                        sequence,
+                        seed,
+                        i,
+                    )
+                )
+
+            else:
+                residues.append(
+                    STANDARD_RESIDUES[aa]
+                )
+
+        return residues
+
+    # --------------------------------------------------------------
+    # 2. Fully charged D/E/H/K/R model
+    # --------------------------------------------------------------
+    if rule == "charged":
+
+        mapping = STANDARD_RESIDUES.copy()
+
+        mapping.update({
+            "D": "ASP",
+            "E": "GLU",
+            "H": "HIP",
+            "K": "LYS",
+            "R": "ARG",
+            "C": "CYS",
+            "Y": "TYR",
+        })
+
+        return [
+            mapping[aa]
+            for aa in sequence
+        ]
+
+    # --------------------------------------------------------------
+    # 3. Maximum-ionized charge-balanced model
+    # --------------------------------------------------------------
+
+    acid_positions = [
+        i for i, aa in enumerate(sequence)
+        if aa in {"D", "E"}
+    ]
+
+    arg_positions = [
+        i for i, aa in enumerate(sequence)
+        if aa == "R"
+    ]
+
+    lys_positions = [
+        i for i, aa in enumerate(sequence)
+        if aa == "K"
+    ]
+
+    his_positions = [
+        i for i, aa in enumerate(sequence)
+        if aa == "H"
+    ]
+
+    n_acid = len(acid_positions)
+
+    n_arg = len(arg_positions)
+    n_lys = len(lys_positions)
+    n_his = len(his_positions)
+
+    n_positive_capacity = (
+        n_arg
+        + n_lys
+        + n_his
+    )
+
+    # Number of positive/negative charge pairs
+    n_charge = min(
+        n_acid,
+        n_positive_capacity,
+    )
+
+    # --------------------------------------------------------------
+    # Positive charge allocation
+    #
+    # Priority:
+    # ARG > LYS > HIP
+    # --------------------------------------------------------------
+    n_arg_charged = min(
+        n_arg,
+        n_charge,
+    )
+
+    remaining = (
+        n_charge
+        - n_arg_charged
+    )
+
+    n_lys_charged = min(
+        n_lys,
+        remaining,
+    )
+
+    remaining -= n_lys_charged
+
+    n_hip = min(
+        n_his,
+        remaining,
+    )
+
+    # --------------------------------------------------------------
+    # Deterministically choose which individual residues are charged
+    # --------------------------------------------------------------
+
+    charged_acid_positions = _select_positions(
+        acid_positions,
+        n_charge,
+        sequence,
+        seed,
+        "charged_acid",
+    )
+
+    charged_arg_positions = _select_positions(
+        arg_positions,
+        n_arg_charged,
+        sequence,
+        seed,
+        "charged_arg",
+    )
+
+    charged_lys_positions = _select_positions(
+        lys_positions,
+        n_lys_charged,
+        sequence,
+        seed,
+        "charged_lys",
+    )
+
+    charged_his_positions = _select_positions(
+        his_positions,
+        n_hip,
+        sequence,
+        seed,
+        "charged_his",
+    )
+
+    # --------------------------------------------------------------
+    # Build residue list
+    # --------------------------------------------------------------
+    residues = []
+
+    for i, aa in enumerate(sequence):
+
+        # --------------------------
+        # Asp
+        # --------------------------
+        if aa == "D":
+
+            if i in charged_acid_positions:
+                residues.append("ASP")
+            else:
+                residues.append("ASH")
+
+        # --------------------------
+        # Glu
+        # --------------------------
+        elif aa == "E":
+
+            if i in charged_acid_positions:
+                residues.append("GLU")
+            else:
+                residues.append("GLH")
+
+        # --------------------------
+        # Arg
+        # --------------------------
+        elif aa == "R":
+
+            if i in charged_arg_positions:
+                residues.append("ARG")
+            else:
+                residues.append("ARN")
+
+        # --------------------------
+        # Lys
+        # --------------------------
+        elif aa == "K":
+
+            if i in charged_lys_positions:
+                residues.append("LYS")
+            else:
+                residues.append("LYN")
+
+        # --------------------------
+        # His
+        # --------------------------
+        elif aa == "H":
+
+            if i in charged_his_positions:
+                residues.append("HIP")
+
+            else:
+                residues.append(
+                    _neutral_histidine(
+                        sequence,
+                        seed,
+                        i,
+                    )
+                )
+
+        # --------------------------
+        # Other residues
+        # --------------------------
+        else:
+            residues.append(
+                STANDARD_RESIDUES[aa]
+            )
+
+    if cap:
+        residues[0] = 'N'+residues[0]
+        residues[-1] = 'C'+residues[-1]
+
+    return residues
 
