@@ -9,6 +9,7 @@
 import subprocess
 import os
 import math
+import re
 import numpy as np
 from scipy import stats
 import pandas as pd
@@ -17,6 +18,7 @@ from rdkit import Chem
 from rdkit import Geometry as Geom
 from ..core import calc, poly, const, utils
 from ..ff import ff_class
+from .profiles import apply_profile
 
 
 # CL Modification **************************************
@@ -38,6 +40,8 @@ class LAMMPS():
         self.work_dir = work_dir if work_dir else './'
         self.solver_path = solver_path if solver_path else const.lammps_exec
 
+        self.kokkos = kwargs.get('kokkos', os.environ.get('RadonPy_LAMMPS_KOKKOS'))
+
         self.idx = kwargs.get('idx', None)
         self.dat_file = kwargs.get('dat_file', 'radon_md_lmp.data' if self.idx is None else 'radon_md_lmp_%i.data' % self.idx)
         self.input_file = kwargs.get('input_file', 'radon_lmp.in' if self.idx is None else 'radon_lmp_%i.in' % self.idx)
@@ -48,6 +52,10 @@ class LAMMPS():
             'intel': False,
             'opt': False,
             'gpu': False,
+            'kokkos_gpu': False,
+            'kokkos': False,
+            'kokkos_cuda': False,
+            'kokkos_omp': False,
             'tally': False,
             'package_list': []
         }
@@ -65,12 +73,23 @@ class LAMMPS():
             check_package[self.solver_path] = self.package
 
 
+    def _use_kokkos(self, gpu, kokkos=None):
+        mode = self.kokkos if kokkos is None else kokkos
+        if mode is None:
+            return gpu > 0 and not self.package['gpu'] and self.package['kokkos_gpu']
+        if mode not in ('auto', 'on', 'off'):
+            raise ValueError('KOKKOS mode must be auto, on or off.')
+        if mode == 'on' and not self.package['kokkos']:
+            raise ValueError('KOKKOS was requested but is not installed in this LAMMPS executable.')
+        return mode == 'on' or (mode == 'auto' and gpu > 0 and self.package['kokkos'])
+
+
     @property
     def get_name(self):
         return 'LAMMPS'
 
 
-    def exec(self, input_file=None, output_file=None, omp=0, mpi=0, gpu=0, return_cmd=False, intel='off', opt='off'):
+    def exec(self, input_file=None, output_file=None, omp=0, mpi=0, gpu=0, return_cmd=False, intel='off', opt='off', kokkos=None):
         """
         LAMMPS.exec
 
@@ -81,7 +100,8 @@ class LAMMPS():
             output_file: Output file (str)
             omp: Number of openMP thread (int)
             mpi: Number of MPI process (int)
-            gpu: Num ber of GPU (int)
+            gpu: Number of GPUs per node (int)
+            kokkos: on, off or auto; without an override, use the default GPU fallback
 
         Return:
             Return args of subprocess.run()
@@ -90,10 +110,19 @@ class LAMMPS():
         input_file = input_file if input_file else self.input_file
         output_file = output_file if output_file else self.output_file
 
-        if omp != 0 and not self.package['omp']:
+        mode = self.kokkos if kokkos is None else kokkos
+        use_kokkos = self._use_kokkos(gpu, kokkos)
+        kokkos_fallback = use_kokkos and mode is None
+        explicit_kokkos = use_kokkos and not kokkos_fallback
+        if explicit_kokkos:
+            if any(isinstance(value, bool) or not isinstance(value, int) or value < minimum
+                   for value, minimum in ((gpu, 0), (omp, -1), (mpi, -1))):
+                raise ValueError('KOKKOS requires nonnegative GPU counts and MPI/OpenMP counts >= -1.')
+
+        if not explicit_kokkos and omp != 0 and not self.package['omp']:
             omp = 0
             utils.radon_print('OPENMP package is not available. Parallel number of OPENMP is changed to zero.', level=2)
-        if gpu != 0 and not self.package['gpu']:
+        if not use_kokkos and gpu != 0 and not self.package['gpu']:
             gpu = 0
             utils.radon_print('GPU package is not available. Parallel number of GPU is changed to zero.', level=2)
 
@@ -102,6 +131,14 @@ class LAMMPS():
             omp = 0
         elif omp == -1:
             omp = utils.cpu_count()
+            if explicit_kokkos and not self.package['kokkos_omp']:
+                omp = 0
+
+        if explicit_kokkos:
+            if gpu and not self.package['kokkos_cuda']:
+                raise ValueError('KOKKOS GPU execution requires a CUDA-enabled LAMMPS build.')
+            if omp > 1 and not self.package['kokkos_omp']:
+                raise ValueError('KOKKOS thread counts above one require its OpenMP backend.')
 
         intel_flag = False
         if intel == 'on':
@@ -119,7 +156,10 @@ class LAMMPS():
         else:
             opt_flag = False
 
+        requested_mpi = mpi
         mpi = check_mpirun(mpi)
+        if explicit_kokkos and requested_mpi > 0 and mpi == 0:
+            raise RuntimeError('The requested MPI launcher is unavailable for this KOKKOS run.')
 
         if mpi > 0:
             mpi_cmd = const.mpi_cmd % (mpi)
@@ -133,7 +173,19 @@ class LAMMPS():
         else:
             os.environ['OMP_NUM_THREADS'] = str(omp)
 
-        if gpu > 0 and omp > 0:
+        if explicit_kokkos:
+            acc_str = '-k on'
+            if gpu:
+                acc_str += ' g %i' % gpu
+            if omp > 1:
+                acc_str += ' t %i' % omp
+            # Preserve bonded Newton semantics and share a half list across CPU/GPU styles.
+            # Host MPI buffers also work with the site's non-CUDA-aware MPI builds.
+            acc_str += ' -sf kk -pk kokkos newton on neigh half gpu/aware off'
+        elif kokkos_fallback:
+            utils.radon_print('Using the KOKKOS package with %i GPU(s).' % gpu, level=1)
+            acc_str = '-k on g %i -sf kk' % gpu
+        elif gpu > 0 and omp > 0:
             acc_str = '-sf gpu -pk gpu %i omp %i' % (gpu, omp)
         elif gpu > 0:
             acc_str = '-sf gpu -pk gpu %i' % (gpu)
@@ -181,7 +233,7 @@ class LAMMPS():
 
 
     def run(self, md, mol=None, confId=0, input_file=None, output_file=None, last_data=None, last_str=None,
-            omp=0, mpi=0, gpu=0, intel='off', opt='off'):
+            omp=0, mpi=0, gpu=0, intel='off', opt='off', kokkos=None):
 
         input_file = input_file if input_file else self.input_file
         output_file = output_file if output_file else self.output_file
@@ -193,7 +245,8 @@ class LAMMPS():
         if not os.path.isfile(os.path.join(self.work_dir, input_file)):
             utils.radon_print('Cannot write LAMMPS input file.', level=2)
 
-        cp = self.exec(input_file=input_file, output_file=output_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt)
+        kwargs = {} if kokkos is None else {'kokkos': kokkos}
+        cp = self.exec(input_file=input_file, output_file=output_file, omp=omp, mpi=mpi, gpu=gpu, intel=intel, opt=opt, **kwargs)
 
         if cp.returncode != 0 and (
                     (last_data is not None and not os.path.exists(os.path.join(self.work_dir, last_data)))
@@ -234,6 +287,7 @@ class LAMMPS():
             cmd = '%s -h' % self.solver_path
             cp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8')
             lines = str(cp.stdout).splitlines()
+            kokkos_help = cp.stdout
 
             flag = 0
             for l in lines:
@@ -271,6 +325,7 @@ class LAMMPS():
                 cmd = '%s %s -h' % (mpi_cmd, self.solver_path)
                 cp = subprocess.run([cmd], shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, encoding='UTF-8')
                 lines = str(cp.stdout).splitlines()
+                kokkos_help = cp.stdout
 
                 flag = 0
                 for l in lines:
@@ -308,6 +363,12 @@ class LAMMPS():
         self.package['intel'] = check_intel
         self.package['opt'] = check_opt
         self.package['gpu'] = check_gpu
+        self.package['kokkos'] = 'KOKKOS' in package_list
+        api = re.search(r'^KOKKOS package API:(.*)$', kokkos_help, re.MULTILINE)
+        backends = api.group(1).split() if api else []
+        self.package['kokkos_gpu'] = self.package['kokkos'] and any(b in backends for b in ('CUDA', 'HIP', 'SYCL'))
+        self.package['kokkos_cuda'] = 'CUDA' in backends
+        self.package['kokkos_omp'] = 'OpenMP' in backends
         self.package['tally'] = check_tally
         self.package['package_list'] = package_list
 
@@ -387,6 +448,8 @@ class LAMMPS():
         Return:
             Strings of content in input files
         """
+
+        apply_profile(md)
 
         for wf in md.wf:
             if hasattr(wf, 'bcreate') and wf.bcreate:
@@ -890,6 +953,21 @@ class LAMMPS():
                     elif wf.deform_axis == 'yz':
                         wf.px_start, wf.px_stop, wf.px_dump = wf.p_start, wf.p_stop, wf.p_dump
             
+            if wf.deform_remap:
+                indata[-1] += ' remap %s' % wf.deform_remap
+
+            unfix.append('unfix DEF%i' % (i+1))
+
+        elif wf.deform == 'erate':
+            if wf.deform_axis not in ('x', 'y', 'z'):
+                raise ValueError('Strain-rate deformation needs one axis')
+            # L(t) = L0 (1 + rate*t), rate in 1/fs.
+            indata.append('fix DEF%i all deform 1 %s erate %e units box' % (i+1, wf.deform_axis, wf.deform_rate))
+            if wf.ensemble in ['npt', 'nph'] and not wf.p_aniso:
+                wf.p_aniso = True
+                for axis in 'xyz'.replace(wf.deform_axis, ''):
+                    for key in ('start', 'stop', 'dump'):
+                        setattr(wf, 'p%s_%s' % (axis, key), getattr(wf, 'p_'+key))
             if wf.deform_remap:
                 indata[-1] += ' remap %s' % wf.deform_remap
 

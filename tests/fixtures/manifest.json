@@ -1,0 +1,70 @@
+{
+  "seed": 1701,
+  "rdkit": "2024.09.6",
+  "purpose": "small fixed oligomers; NOT equilibrated bulk reference data",
+  "fixtures": {
+    "pe_gaff.json": {
+      "smiles": "[H]C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC*",
+      "degree": 3,
+      "atoms": 26,
+      "sha256": "e0c1bff5e76d65e70f81d567f72cbf9739060722e7242e3df8b4df1a4781d84a"
+    },
+    "pe_gaff2.json": {
+      "smiles": "[H]C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC*",
+      "degree": 3,
+      "atoms": 26,
+      "sha256": "f894df86ae56c54e58203f020bb084ed1faaf35ccb73dc095024f18f82108461"
+    },
+    "pe_gaff2_mod.json": {
+      "smiles": "[H]C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC*",
+      "degree": 3,
+      "atoms": 26,
+      "sha256": "0672cb380b4e2230fcfcee4a712bd261bcdc4b5992fcb7d67ffd6c39197b4821"
+    },
+    "ps_gaff.json": {
+      "smiles": "[H]c1c([H])c([H])c([C@@]([H])(C([H])([H])[C@@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])[H])C([H])([H])[C@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])C([H])([H])[H])c([H])c1[H]",
+      "repeat_unit": "*CC(*)c1ccccc1",
+      "degree": 3,
+      "atoms": 56,
+      "sha256": "d09d490ab3c7d9853df5aaf62f172243477b4e173ca944712e3e88f22baeb31d"
+    },
+    "ps_gaff2.json": {
+      "smiles": "[H]c1c([H])c([H])c([C@@]([H])(C([H])([H])[C@@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])[H])C([H])([H])[C@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])C([H])([H])[H])c([H])c1[H]",
+      "repeat_unit": "*CC(*)c1ccccc1",
+      "degree": 3,
+      "atoms": 56,
+      "sha256": "d45947f5f4ece52911cb33e653a1ef599187bdf2e840649b141669c8b0032d3d"
+    },
+    "ps_gaff2_mod.json": {
+      "smiles": "[H]c1c([H])c([H])c([C@@]([H])(C([H])([H])[C@@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])[H])C([H])([H])[C@]([H])(c2c([H])c([H])c([H])c([H])c2[H])C([H])([H])C([H])([H])[H])c([H])c1[H]",
+      "repeat_unit": "*CC(*)c1ccccc1",
+      "degree": 3,
+      "atoms": 56,
+      "sha256": "020eb14a439c5c8e4eba7ac471a8971e6c40e81435fe606051fcd7db9253956f"
+    },
+    "pmma_gaff.json": {
+      "smiles": "[H]C([H])([H])OC(=O)C(C([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC(*)(C)C(=O)OC",
+      "degree": 3,
+      "atoms": 53,
+      "sha256": "b3ce8bbeed592d6caf396bb7fd2443ceb8b09069e8dc13f27f500a006a0d6fd5"
+    },
+    "pmma_gaff2.json": {
+      "smiles": "[H]C([H])([H])OC(=O)C(C([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC(*)(C)C(=O)OC",
+      "degree": 3,
+      "atoms": 53,
+      "sha256": "d1d3ffdb07d6305eed6ccae77c3c634bf67f8176bc06d052554fcf0ded236e34"
+    },
+    "pmma_gaff2_mod.json": {
+      "smiles": "[H]C([H])([H])OC(=O)C(C([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])[C@](C(=O)OC([H])([H])[H])(C([H])([H])[H])C([H])([H])C([H])([H])[H]",
+      "repeat_unit": "*CC(*)(C)C(=O)OC",
+      "degree": 3,
+      "atoms": 53,
+      "sha256": "89100b899a1f4be64932f96b393f470ff8ca8569b2f50e5ecad75332c71beecf"
+    }
+  }
+}

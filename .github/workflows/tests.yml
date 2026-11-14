@@ -1,0 +1,42 @@
+name: tests
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tests/requirements.lock
+      - run: pip install -r tests/requirements.lock
+      - name: Run tests without MD engines
+        env:
+          MPLBACKEND: Agg
+        run: python -m pytest -c tests/pytest.ini tests -q -m 'not engines'
+
+  engines:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build LAMMPS/GROMACS image
+        uses: docker/build-push-action@v6
+        with:
+          context: tests
+          file: tests/engines.Dockerfile
+          build-args: BUILD_JOBS=4
+          tags: radonpy-engines:ci
+          load: true
+          cache-from: type=gha,scope=engines
+          cache-to: type=gha,mode=max,scope=engines
+      - name: Run tests with MD engines
+        run: docker run --rm -v "$PWD:/work" radonpy-engines:ci
